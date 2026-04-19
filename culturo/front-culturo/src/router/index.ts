@@ -51,7 +51,8 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['admin'], layout: 'main' },
     },
     {
-      path: '/planification',
+      path: '/plan',
+      alias: ['/planification'],
       name: 'planning',
       component: () => import('@/views/PlanningView.vue'),
       meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main' },

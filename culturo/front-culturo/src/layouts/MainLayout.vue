@@ -57,7 +57,7 @@ const navItems = computed(() => {
       { to: '/admin/utilisateurs', label: 'Utilisateurs', caption: 'Phase 6' },
       { to: '/admin/botanique', label: 'Referentiel botanique', caption: 'Phase 2' },
       { to: '/admin/sol-planches', label: 'Sol & planches', caption: 'Phase 3' },
-      { to: '/planification', label: 'Planification', caption: 'Phase 4' },
+      { to: '/plan', label: 'Planification', caption: 'Phase 4' },
       { to: '/historique', label: 'Historique', caption: 'Phase 5' },
       { to: '/admin/configuration', label: 'Configuration', caption: 'Fondation' },
     ];
@@ -65,7 +65,7 @@ const navItems = computed(() => {
 
   if (auth.isFormateur) {
     return [
-      { to: '/planification', label: 'Planification', caption: 'Phase 4' },
+      { to: '/plan', label: 'Planification', caption: 'Phase 4' },
       { to: '/validation', label: 'Validation', caption: 'Phase 6' },
       { to: '/historique', label: 'Historique', caption: 'Phase 5' },
       {

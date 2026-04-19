@@ -5,7 +5,8 @@ BEGIN;
 -- =====================================================
 INSERT INTO role (role_name) VALUES
 ('formateur'),
-('stagiaire');
+('stagiaire'),
+('admin');
 
 -- =====================================================
 -- 2. FAMILY IMPORTANCE
@@ -46,7 +47,8 @@ INSERT INTO "user_" (
 ) VALUES
 ('Sylvie','Dubois','1980-01-01','sylvie@culturo.be','$2b$10$KbQi8A2l2ZH3Bp6mDcU8uOYkH7N9n8kXQXlx0cRx2h/DQyJ1n/RHu','0471111111',TRUE,1),
 ('Marc','Lefevre','1985-05-15','marc@culturo.be','$2b$10$KbQi8A2l2ZH3Bp6mDcU8uOYkH7N9n8kXQXlx0cRx2h/DQyJ1n/RHu','0472222222',TRUE,2),
-('Antoine','Ferma','1995-01-01','antoine@culturo.be','$2b$10$KbQi8A2l2ZH3Bp6mDcU8uOYkH7N9n8kXQXlx0cRx2h/DQyJ1n/RHu','0473333333',TRUE,2);
+('Antoine','Ferma','1995-01-01','antoine@culturo.be','$2b$10$KbQi8A2l2ZH3Bp6mDcU8uOYkH7N9n8kXQXlx0cRx2h/DQyJ1n/RHu','0473333333',TRUE,2),
+('Admin','Culturo','1975-01-01','admin@culturo.be','$2b$10$KbQi8A2l2ZH3Bp6mDcU8uOYkH7N9n8kXQXlx0cRx2h/DQyJ1n/RHu','0474444444',TRUE,3);
 
 -- =====================================================
 -- 7. EXPLOITATION
