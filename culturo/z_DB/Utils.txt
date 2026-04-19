@@ -1,0 +1,102 @@
+
+
+Générer un script SQL complet pour la création de tes tables à partir de tes entités NestJS/TypeORM. Voici la méthode la plus fiable :
+
+
+1️⃣ Préparer le data-source.ts
+
+Assure-toi que ton fichier src/data-source.ts ressemble à ceci :
+
+import 'reflect-metadata';
+import { DataSource } from 'typeorm';
+import { User_ } from './entities/user_.entity';
+import { Role } from './entities/role.entity';
+import { Amendement } from './entities/amendement.entity';
+import { Watering } from './entities/watering.entity';
+import { Order } from './entities/order.entity';
+import { Exploitation } from './entities/exploitation.entity';
+import { Family } from './entities/family.entity';
+import { Vegetable } from './entities/vegetable.entity';
+import { Board } from './entities/board.entity';
+import { SectionPlan } from './entities/section_plan.entity';
+import { Harvest } from './entities/harvest.entity';
+import { Section } from './entities/section.entity';
+import { Sole } from './entities/sole.entity';
+import { OrderDetail } from './entities/order-details.entity';
+import { Family_importance } from './entities/family_importance.entity';
+import { Price } from './entities/price.entity';
+import { Amended } from './entities/amended.entity';
+import { Treated } from './entities/treated.entity';
+import { Treatment } from './entities/treatment.entity';
+
+export const AppDataSource = new DataSource({
+  type: 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  port: +(process.env.DB_PORT || 5432),
+  username: process.env.DB_USERNAME || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
+  database: process.env.DB_DATABASE || 'culturo',
+  entities: [
+    User_,
+    Role,
+    Amendement,
+    Watering,
+    Order,
+    Exploitation,
+    Family,
+    Vegetable,
+    Board,
+    SectionPlan,
+    Harvest,
+    Section,
+    Sole,
+    OrderDetail,
+    Family_importance,
+    Price, 
+    Amended,
+    Treated,
+    Treatment
+  ],
+  synchronize: false, // IMPORTANT ici, on veut juste générer le SQL
+  logging: false,
+});
+
+2️⃣ Compiler le projet
+
+TypeORM CLI travaille sur les fichiers JS compilés. Donc compile ton NestJS :
+
+tsc
+
+
+Après compilation, tu auras un dossier dist avec tous les JS.
+
+3️⃣ Générer le SQL
+
+Dans le dossier racine du projet, exécute :
+
+npx typeorm schema:log -d ./dist/data-source.js > schema.sql
+
+
+⚠️ Points importants :
+
+Le chemin -d ./dist/data-source.js doit pointer vers le JS compilé, pas TS.
+
+synchronize doit être à false dans le DataSource pour que TypeORM génère le SQL au lieu de modifier la base.
+
+
+-- Pour passer toutes les section fini en false 
+UPDATE section
+SET section_active = FALSE
+WHERE section_active = TRUE
+  AND end_date < CURRENT_DATE;
+
+
+-- remettre la DB a 0
+\c postgres;
+drop database culturo;
+create database culturo;
+\c culturo;
+\d
+
+-- Hash for "123456" 
+$2b$10$Xm4X5/K5RIi5PpMLN6jnwenQDDz77mFAar4nhbgIaqxvQERtVtEgu
