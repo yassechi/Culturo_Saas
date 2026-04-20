@@ -123,9 +123,9 @@ export class UsersController {
    * Créer un nouvel utilisateur - Uniquement FORMATEUR
    */
   @Post('register')
-  // @UseGuards(AuthChard, PermissionsGuard)
-  // @RequiertPermissions(Permission.CREER_UTILISATEUR)
-  // @ApiSecurity('bearer')
+  @UseGuards(AuthChard, PermissionsGuard)
+  @RequiertPermissions(Permission.CREER_UTILISATEUR)
+  @ApiSecurity('bearer')
   @ApiOperation({ summary: 'Register User' })
   public async registerUser(@Body() registerDto: RegisterDTO) {
     return await this.userService.register(registerDto);

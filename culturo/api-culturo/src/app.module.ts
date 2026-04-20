@@ -44,7 +44,6 @@ const envFilePath =
     OrderModule,
     TreatmentModule,
     WateringModule,
-    TreatmentModule,
   ],
 })
 export class AppModule {}

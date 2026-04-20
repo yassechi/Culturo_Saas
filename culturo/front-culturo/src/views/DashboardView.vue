@@ -1,11 +1,12 @@
 <template>
   <section class="page-grid">
     <article class="dashboard-card">
-      <span class="eyebrow">Session active</span>
-      <h3>Bonjour {{ displayName }}</h3>
+      <span class="eyebrow">Tableau de bord</span>
+      <h3>Bienvenue, {{ displayName }}</h3>
+      <p>Role : <strong>{{ auth.user?.role ?? 'inconnu' }}</strong></p>
       <p>
-        Le frontend est maintenant autonome dans <code>Culturo_Saas</code> et adapte
-        deja la navigation selon le role connecte.
+        La session est ouverte avec un token JWT et la navigation s'adapte
+        automatiquement au role connecte.
       </p>
     </article>
 
@@ -16,8 +17,8 @@
       </article>
 
       <article class="dashboard-card">
-        <span class="stat-line">{{ auth.token ? 'JWT' : 'N/A' }}</span>
-        <p>Token stocke cote client et renvoye sur chaque appel API.</p>
+        <span class="stat-line">{{ auth.token ? 'JWT actif' : 'N/A' }}</span>
+        <p>Le token est stocke cote client et renvoye sur chaque appel API.</p>
       </article>
 
       <article class="dashboard-card">
@@ -27,11 +28,19 @@
     </div>
 
     <article class="dashboard-card">
-      <h3>Ce que cette base debloque</h3>
-      <ul class="feature-list">
-        <li>Vue 3 + Pinia + Router dans le repo racine.</li>
-        <li>Connexion utilisateur sans modifier le repo API.</li>
-        <li>Navigation protegee pour admin, formateur et stagiaire.</li>
+      <h3>Actions disponibles</h3>
+
+      <ul v-if="auth.isAdmin" class="feature-list">
+        <li><RouterLink to="/admin/utilisateurs">Gerer les utilisateurs</RouterLink></li>
+        <li><RouterLink to="/plan">Planification</RouterLink></li>
+      </ul>
+
+      <ul v-else-if="auth.isFormateur" class="feature-list">
+        <li><RouterLink to="/plan">Planification</RouterLink></li>
+      </ul>
+
+      <ul v-else-if="auth.isStagiaire" class="feature-list">
+        <li><RouterLink to="/observations">Mes observations</RouterLink></li>
       </ul>
     </article>
   </section>

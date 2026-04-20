@@ -5,9 +5,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User_ } from 'src/entities/user_.entity';
 import { Role } from 'src/entities/role.entity';
 import { JWTPayloadType } from 'src/utils/types';
-import { ConfigService } from '@nestjs/config';
 import { LoginDTO } from './dtos/login.dto';
-import bcrypt from 'node_modules/bcryptjs';
+import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import {
