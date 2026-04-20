@@ -1,0 +1,88 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: culturo-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: culturo_secret
+      POSTGRES_DB: culturo
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d culturo']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: ./api-culturo
+      dockerfile: Dockerfile
+    container_name: culturo-api
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: culturo_secret
+      DB_NAME: culturo
+      JWT_SECRET: dev-secret-change-in-production
+      PORT: 3000
+      NODE_ENV: development
+      MAIL_HOST: localhost
+      MAIL_PORT: 1025
+      MAIL_USER: dev
+      MAIL_PASSWORD: dev
+      MAIL_FROM: Culturo <noreply@culturo.local>
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./api-culturo:/app
+      - /app/node_modules
+    command: npm run start:dev
+
+  db-seed:
+    image: postgres:15-alpine
+    container_name: culturo-db-seed
+    environment:
+      PGPASSWORD: culturo_secret
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: culturo
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started
+    volumes:
+      - ./z_DB/inserts.sql:/seed/inserts.sql:ro
+      - ./z_DB/seed.sh:/seed/seed.sh:ro
+    entrypoint: ['/bin/sh', '/seed/seed.sh']
+    restart: 'no'
+
+  front:
+    build:
+      context: ./front-culturo
+      dockerfile: Dockerfile.dev
+    container_name: culturo-front
+    environment:
+      VITE_API_URL: http://localhost:3000
+      CHOKIDAR_USEPOLLING: 'true'
+    ports:
+      - '5173:5173'
+    depends_on:
+      api:
+        condition: service_started
+      db-seed:
+        condition: service_completed_successfully
+    volumes:
+      - ./front-culturo:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:

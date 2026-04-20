@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:15
+    pull_policy: never
+
+  api:
+    image: api-culturo-api:latest
+    build: null
+    pull_policy: never
+
+  db-seed:
+    image: postgres:15
+    pull_policy: never
+
+  front:
+    image: api-culturo-vue:latest
+    build: null
+    pull_policy: never
