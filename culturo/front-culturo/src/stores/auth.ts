@@ -36,6 +36,7 @@ function normalizeRole(role: unknown): UserRole {
     return role;
   }
 
+  console.warn(`[auth] Rôle inconnu reçu de l'API : "${role}". Défaut : stagiaire.`);
   return 'stagiaire';
 }
 

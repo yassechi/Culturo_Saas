@@ -19,4 +19,13 @@ export enum Permission {
   CREER_VARIETE_LEGUME = 'creer_variete_legume',
   MODIFIER_SUPPRIMER_VARIETE_LEGUME = 'modifier_supprimer_variete_legume',
   MODIFIER_SUPPRIMER_RECOLTE = 'modifier_supprimer_recolte',
+
+  // Planification & rotations
+  PLANIFIER_CULTURE = 'planifier_culture',
+  BYPASS_ROTATION = 'bypass_rotation',
+  CONSULTER_PLAN = 'consulter_plan',
+
+  // Observations terrain
+  SAISIR_OBSERVATION = 'saisir_observation',
+  CONSULTER_OBSERVATIONS = 'consulter_observations',
 }

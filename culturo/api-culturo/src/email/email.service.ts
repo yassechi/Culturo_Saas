@@ -10,7 +10,7 @@ export class EmailService {
     this.transporter = nodemailer.createTransport({
       host: this.configService.get<string>('MAIL_HOST'),
       port: this.configService.get<number>('MAIL_PORT'),
-      secure: false, // ← IMPORTANT : Forcer à false pour Mailtrap
+      secure: this.configService.get<string>('MAIL_SECURE') === 'true',
       auth: {
         user: this.configService.get<string>('MAIL_USER'),
         pass: this.configService.get<string>('MAIL_PASSWORD'),
@@ -26,14 +26,6 @@ export class EmailService {
     firstName: string,
     lastName: string,
   ): Promise<void> {
-    console.log('========== DEBUG EMAIL ==========');
-    console.log("Tentative d'envoi d'email à:", email);
-    console.log('MAIL_HOST:', this.configService.get<string>('MAIL_HOST'));
-    console.log('MAIL_PORT:', this.configService.get<number>('MAIL_PORT'));
-    console.log('MAIL_USER:', this.configService.get<string>('MAIL_USER'));
-    console.log('MAIL_FROM:', this.configService.get<string>('MAIL_FROM'));
-    console.log('=================================');
-
     try {
       const info = await this.transporter.sendMail({
         from: this.configService.get<string>('MAIL_FROM'),
@@ -51,9 +43,7 @@ export class EmailService {
       `,
       });
 
-      console.log(' Email envoyé avec succès !');
-      console.log('Message ID:', info.messageId);
-      console.log('Response:', info.response);
+      console.log(`Email envoyé à ${email} — Message ID: ${info.messageId}`);
     } catch (error) {
       console.error("Erreur lors de l'envoi de l'email:", error);
       throw new InternalServerErrorException(

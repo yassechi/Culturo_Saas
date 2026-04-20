@@ -1,123 +1,105 @@
-# Quickstart: Phase 1 — Fondation & Architecture
+# Quickstart: Phase 1 - Fondation & Architecture
 
-**Prérequis**: Docker & Docker Compose installés, repo cloné.
+**Prerequis**: Docker et Docker Compose installes, repo clone.
 
----
-
-## Démarrage en une commande
+## Demarrage en une commande
 
 ```bash
-cd planculture
+cd culturo
 docker compose up --build
 ```
 
-L'application est prête quand vous voyez :
-```
+L'application est prete quand vous voyez :
+
+```text
 api    | [NestFactory] Starting Nest application...
 api    | Application is running on: http://0.0.0.0:3000
 front  | VITE ready in XXXms
-front  | ➜  Local: http://localhost:5173/
+front  | Local: http://localhost:5173/
 ```
 
----
-
-## Accès aux services
+## Acces aux services
 
 | Service | URL | Description |
 |---------|-----|-------------|
 | Frontend | http://localhost:5173 | Application Vue.js 3 |
 | API | http://localhost:3000 | Backend NestJS |
 | Swagger | http://localhost:3000/swagger | Documentation API |
-| PostgreSQL | localhost:5432 | Base de données (user: postgres) |
+| PostgreSQL | localhost:5432 | Base de donnees (`postgres`) |
 
----
+## Comptes de test
 
-## Comptes de test (initialisés via insert.sql)
+Les comptes sont injectes via `culturo/z_DB/inserts.sql`.
 
-| Email | Mot de passe | Rôle |
-|-------|-------------|------|
-| admin@culturo.fr | (voir insert.sql) | Admin |
-| formateur@culturo.fr | (voir insert.sql) | Formateur |
-| stagiaire@culturo.fr | (voir insert.sql) | Stagiaire |
-
----
+| Email | Mot de passe | Role |
+|-------|---------------|------|
+| admin@culturo.be | 123456 | Admin |
+| sylvie@culturo.be | 123456 | Formateur |
+| marc@culturo.be | 123456 | Stagiaire |
 
 ## Validation de l'environnement
 
-Vérifier que tout fonctionne :
-
 ```bash
-# 1. API répond
+# 1. API
 curl http://localhost:3000
 
-# 2. Login fonctionne
+# 2. Swagger
+curl http://localhost:3000/swagger
+
+# 3. Login
 curl -X POST http://localhost:3000/users/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@culturo.fr","password":"votremotdepasse"}'
-# → doit retourner { "access_token": "...", "user": {...} }
+  -d '{"email":"admin@culturo.be","password":"123456","hpassword":"123456"}'
 
-# 3. Route protégée fonctionne
-curl http://localhost:3000/users \
-  -H "Authorization: Bearer <token_obtenu_ci_dessus>"
-# → doit retourner la liste des utilisateurs
-
-# 4. Route bloquée sans token
-curl http://localhost:3000/users
-# → doit retourner 401
-
-# 5. Frontend accessible
+# 4. Frontend
 curl http://localhost:5173
-# → doit retourner le HTML de l'app Vue
 ```
 
----
-
-## Développement sans Docker
+## Developpement sans Docker
 
 ### Backend
 
 ```bash
-cd planculture/api-culturo
-cp .env.example .env       # adapter les credentials DB locaux
+cd culturo/api-culturo
+cp .env.example .env
 npm install
-npm run start:dev          # hot-reload activé
+npm run start:dev
 ```
 
 ### Frontend
 
 ```bash
-cd planculture/front-culturo
-cp .env.example .env       # adapter VITE_API_URL si besoin
+cd culturo/front-culturo
+cp .env.example .env
 npm install
-npm run dev                # Vite dev server sur :5173
+npm run dev
 ```
 
----
+En developpement local sans Docker, `VITE_API_URL` doit etre `/api`.
+Le proxy Vite redirige alors automatiquement vers `http://localhost:3000`.
 
-## Arrêt et nettoyage
+En Docker Compose, le service `front` fournit `VITE_API_URL=http://localhost:3000`.
+
+## Arret et nettoyage
 
 ```bash
-# Arrêter les conteneurs (données conservées)
 docker compose down
-
-# Arrêter + supprimer les données (reset complet)
 docker compose down -v
 ```
 
----
+## Structure de configuration
 
-## Structure des fichiers de configuration
-
-```
-planculture/
-├── docker-compose.yml              # Orchestration des 3 services
-├── api-culturo/
-│   ├── .env.example                # Template variables d'environnement
-│   ├── .env                        # Variables locales (non commité)
-│   ├── Dockerfile                  # Image production (Node 22 alpine)
-│   └── schema.sql                  # Schéma DB (monté dans initdb)
-└── front-culturo/
-    ├── .env.example                # Template variables d'environnement
-    ├── .env                        # Variables locales (non commité)
-    └── Dockerfile                  # Image production (Nginx + build Vite)
+```text
+culturo/
+|-- docker-compose.yml
+|-- api-culturo/
+|   |-- .env.example
+|   |-- Dockerfile
+|-- front-culturo/
+|   |-- .env.example
+|   |-- Dockerfile
+|   |-- Dockerfile.dev
+|-- z_DB/
+|   |-- inserts.sql
+|   |-- seed.sh
 ```

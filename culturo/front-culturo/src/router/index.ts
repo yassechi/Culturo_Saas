@@ -18,68 +18,68 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('@/views/DashboardView.vue'),
-      meta: { requiresAuth: true, layout: 'main' },
+      meta: { requiresAuth: true, layout: 'main', title: 'Tableau de bord' },
     },
     {
       path: '/admin/utilisateurs',
       name: 'admin-users',
       component: () => import('@/views/AdminUsersView.vue'),
-      meta: { requiresAuth: true, roles: ['admin'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['admin'], layout: 'main', title: 'Gestion des utilisateurs' },
     },
     {
       path: '/admin/botanique',
       name: 'admin-botanique',
       component: () => import('@/views/BotanicalCatalogView.vue'),
-      meta: { requiresAuth: true, roles: ['admin'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['admin'], layout: 'main', title: 'Référentiel botanique' },
     },
     {
       path: '/admin/sol-planches',
       name: 'admin-soil-boards',
       component: () => import('@/views/SoilBoardsView.vue'),
-      meta: { requiresAuth: true, roles: ['admin'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['admin'], layout: 'main', title: 'Sol & Planches' },
     },
     {
       path: '/historique',
       name: 'history',
       component: () => import('@/views/HistoryView.vue'),
-      meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main', title: 'Historique' },
     },
     {
       path: '/admin/configuration',
       name: 'admin-config',
       component: () => import('@/views/ConfigurationView.vue'),
-      meta: { requiresAuth: true, roles: ['admin'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['admin'], layout: 'main', title: 'Configuration' },
     },
     {
       path: '/plan',
       alias: ['/planification'],
       name: 'planning',
       component: () => import('@/views/PlanningView.vue'),
-      meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main', title: 'Planification' },
     },
     {
       path: '/validation',
       name: 'validation',
       component: () => import('@/views/ValidationView.vue'),
-      meta: { requiresAuth: true, roles: ['formateur'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['formateur'], layout: 'main', title: 'Validation des saisies' },
     },
     {
       path: '/formateur/tableau-de-bord',
       name: 'trainer-dashboard',
       component: () => import('@/views/TrainerDashboardView.vue'),
-      meta: { requiresAuth: true, roles: ['formateur'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['formateur'], layout: 'main', title: 'Tableau de bord formateur' },
     },
     {
       path: '/plan-culture',
       name: 'culture-plan',
       component: () => import('@/views/CulturePlanView.vue'),
-      meta: { requiresAuth: true, roles: ['stagiaire'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['stagiaire'], layout: 'main', title: 'Plan de culture' },
     },
     {
       path: '/observations',
       name: 'observations',
       component: () => import('@/views/ObservationsView.vue'),
-      meta: { requiresAuth: true, roles: ['stagiaire'], layout: 'main' },
+      meta: { requiresAuth: true, roles: ['stagiaire'], layout: 'main', title: 'Mes observations' },
     },
     {
       path: '/403',
@@ -96,10 +96,6 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore();
-
-  if (!auth.user && auth.token) {
-    auth.loadFromStorage();
-  }
 
   if (to.name === 'login' && auth.isAuthenticated) {
     return { name: 'dashboard' };

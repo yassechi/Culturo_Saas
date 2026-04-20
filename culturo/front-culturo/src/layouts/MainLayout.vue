@@ -19,22 +19,22 @@
       </nav>
 
       <p class="nav-note">
-        Session connectee pour <strong>{{ auth.user?.email ?? 'aucun compte' }}</strong>.
+        Session connectée pour <strong>{{ auth.user?.email ?? 'aucun compte' }}</strong>.
       </p>
 
       <button class="secondary-button" type="button" @click="handleLogout">
-        Deconnexion
+        Déconnexion
       </button>
     </aside>
 
     <section class="content-shell">
       <header class="topbar">
         <div>
-          <span class="eyebrow">Fondation & architecture</span>
-          <h2>Navigation protegee par role</h2>
+          <span class="eyebrow">Culturo SaaS</span>
+          <h2>{{ route.meta.title ?? 'Tableau de bord' }}</h2>
         </div>
         <button class="ghost-button" type="button" @click="handleRefresh">
-          Rafraichir le profil
+          Rafraîchir le profil
         </button>
       </header>
 
@@ -45,8 +45,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+
+const route = useRoute();
 
 const router = useRouter();
 const auth = useAuthStore();

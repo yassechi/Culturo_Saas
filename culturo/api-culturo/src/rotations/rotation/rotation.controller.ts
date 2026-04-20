@@ -24,10 +24,7 @@ import {
   ApiResponse,
   ApiSecurity,
 } from '@nestjs/swagger';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { RotationService } from './rotation.service';
-import { Vegetable } from 'src/entities/vegetable.entity';
 import { PlantingValidationDto } from '../dtos/planting.validation.dto';
 import { CulturePlanQueryDto } from '../dtos/culture.plan.query.dto';
 import { PlantableVegetableDto } from '../dtos/plantable.vegetable.dro';
@@ -36,6 +33,9 @@ import { PlantingSuccessResponse } from '../dtos/planting.succes.warning.dto';
 import { Section } from 'src/entities/section.entity';
 import { SectionPlan } from 'src/entities/section_plan.entity';
 import { AuthChard } from 'src/users/guards/auth.guard';
+import { PermissionsGuard } from 'src/users/guards/permissions.guard';
+import { RequiertPermissions } from 'src/users/decorators/permissions.decorator';
+import { Permission } from 'src/users/permissions/permission.enum';
 
 /**
  * Définit la structure de la réponse du service après une tentative de plantation.
@@ -285,7 +285,8 @@ export class RotationController {
    * Ajouter un légume à une planche - Accessible aux utilisateurs authentifiés
    */
   @Post('add-vegetable')
-  @UseGuards(AuthChard)
+  @UseGuards(AuthChard, PermissionsGuard)
+  @RequiertPermissions(Permission.PLANIFIER_CULTURE)
   @ApiSecurity('bearer')
   @ApiOperation({
     summary: 'Ajoute un légume (avec variété) à une section de planche',
