@@ -7,6 +7,7 @@ import type {
   SoleWithBoards,
   CulturePlanEntry,
   PlantableVegetable,
+  PlantableSection,
   SelectedSection,
   AssignmentForm,
   RuleMessage,
@@ -16,14 +17,14 @@ import type {
   BoardSummary,
 } from '@/types/planning';
 
-const SECTIONS_PER_BOARD = 3;
+const SECTIONS_PER_BOARD_DEFAULT = 3;
 
 function makeDefaultForm(
   year = new Date().getFullYear(),
-  defaults?: { startDate?: string; endDate?: string },
+  defaults?: { startDate?: string; endDate?: string; vegetableId?: number },
 ): AssignmentForm {
   return {
-    vegetableId: null,
+    vegetableId: defaults?.vegetableId ?? null,
     startDate: defaults?.startDate ?? `${year}-01-01`,
     endDate: defaults?.endDate ?? `${year}-12-31`,
     quantityPlanted: 0,
@@ -56,6 +57,15 @@ export const usePlanningStore = defineStore('planning', () => {
   const assignmentLoading = ref(false);
   const lastRuleMessage = ref<RuleMessage | null>(null);
 
+  // boardId → numberOfSections (populated on first open of each board)
+  const sectionPlanCache = ref<Map<number, number>>(new Map());
+
+  // ── Vegetable-first search ──────────────────────────────────────────────────
+  const vegetableSearchOpen = ref(false);
+  const plantableSections = ref<PlantableSection[]>([]);
+  const plantableSectionsLoading = ref(false);
+  const plantableSectionsError = ref<string | null>(null);
+
   // ── Getters ────────────────────────────────────────────────────────────────
   const selectedSole = computed<SoleWithBoards | null>(
     () => soles.value.find((s) => s.id_sole === selectedSoleId.value) ?? null,
@@ -76,16 +86,40 @@ export const usePlanningStore = defineStore('planning', () => {
     () => selectedSole.value?.boards ?? [],
   );
 
+  const boardSectionsCount = computed<Map<number, number>>(() => {
+    const result = new Map<number, number>();
+    for (const board of boardsForSelectedSole.value) {
+      const cached = sectionPlanCache.value.get(board.id_board);
+      if (cached !== undefined) {
+        result.set(board.id_board, cached);
+      } else {
+        // Derive from culture plan until we have actual plan data
+        const maxFromPlan = culturePlan.value
+          .filter((e) => e.boardId === board.id_board)
+          .reduce((max, e) => Math.max(max, e.sectionNumber), 0);
+        result.set(board.id_board, Math.max(maxFromPlan, SECTIONS_PER_BOARD_DEFAULT));
+      }
+    }
+    return result;
+  });
+
   const sectionDisplayMap = computed<Map<string, SectionDisplay>>(() => {
     const map = new Map<string, SectionDisplay>();
 
     for (const board of boardsForSelectedSole.value) {
-      for (let n = 1; n <= SECTIONS_PER_BOARD; n++) {
-        map.set(`${board.id_board}-${n}`, { sectionNumber: n, status: 'available' });
+      const n = boardSectionsCount.value.get(board.id_board) ?? SECTIONS_PER_BOARD_DEFAULT;
+      for (let k = 1; k <= n; k++) {
+        map.set(`${board.id_board}-${k}`, { sectionNumber: k, status: 'available' });
       }
     }
 
+    const today = new Date();
+    const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+
     for (const entry of culturePlan.value) {
+      const endDate = new Date(entry.endDate);
+      const endUtc = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate()));
+      if (endUtc < todayUtc) continue;
       map.set(`${entry.boardId}-${entry.sectionNumber}`, {
         sectionNumber: entry.sectionNumber,
         status: 'occupied',
@@ -130,6 +164,18 @@ export const usePlanningStore = defineStore('planning', () => {
       if (!b.lastPlantedDate) return 1;
       return a.lastPlantedDate.localeCompare(b.lastPlantedDate);
     });
+  });
+
+  // Sections grouped by board for the vegetable-first search results
+  const plantableSectionsByBoard = computed(() => {
+    const map = new Map<number, { boardName: string; sections: PlantableSection[] }>();
+    for (const s of plantableSections.value) {
+      if (!map.has(s.boardId)) {
+        map.set(s.boardId, { boardName: s.boardName, sections: [] });
+      }
+      map.get(s.boardId)!.sections.push(s);
+    }
+    return Array.from(map.values()).sort((a, b) => a.boardName.localeCompare(b.boardName));
   });
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -206,7 +252,7 @@ export const usePlanningStore = defineStore('planning', () => {
     boardId: number,
     boardName: string,
     sectionNumber: number,
-    defaults?: { startDate?: string; endDate?: string },
+    defaults?: { startDate?: string; endDate?: string; vegetableId?: number },
   ) {
     plantableVegetablesRequestId += 1;
     openSection.value = { boardId, boardName, sectionNumber, sectionPlanId: null };
@@ -230,7 +276,12 @@ export const usePlanningStore = defineStore('planning', () => {
     try {
       const planResp = await rotationsApi.createOrGetSectionPlan(openSection.value.boardId);
       if (requestId !== plantableVegetablesRequestId || !openSection.value) return;
+
       openSection.value.sectionPlanId = planResp.data.sectionPlan.id_section_plan;
+
+      // Cache section count for this board
+      const n = planResp.data.sectionPlan.number_of_section;
+      sectionPlanCache.value = new Map(sectionPlanCache.value).set(openSection.value.boardId, n);
 
       const vegResp = await rotationsApi.getPlantableVegetables(
         openSection.value.sectionPlanId,
@@ -245,6 +296,7 @@ export const usePlanningStore = defineStore('planning', () => {
       lastRuleMessage.value = {
         type: 'warning',
         text: 'Impossible de charger les légumes compatibles.',
+        canProceed: false,
       };
     } finally {
       if (requestId === plantableVegetablesRequestId) {
@@ -258,20 +310,34 @@ export const usePlanningStore = defineStore('planning', () => {
     assignmentForm.value.vegetableId = vegetableId;
     lastRuleMessage.value = null;
     try {
-      const resp = await rotationsApi.canPlantVegetable(openSection.value.boardId, vegetableId);
+      const resp = await rotationsApi.canPlantVegetable(
+        openSection.value.boardId,
+        vegetableId,
+        assignmentForm.value.startDate,
+        assignmentForm.value.endDate,
+      );
       if (resp.data.status === 'OK') {
         lastRuleMessage.value = {
           type: 'ok',
           text: '✅ Compatible — aucune contrainte de rotation détectée.',
+          canProceed: true,
+          needsBypass: false,
         };
       } else {
         lastRuleMessage.value = {
           type: 'warning',
           text: `⚠️ ${resp.data.reason ?? 'Règle de rotation non respectée.'}`,
+          canProceed: resp.data.neededBypass !== true,
+          needsBypass: resp.data.neededBypass === true,
         };
       }
     } catch {
-      // Ne pas bloquer l'UI si cette vérification échoue
+      lastRuleMessage.value = {
+        type: 'warning',
+        text: 'Impossible de vérifier la compatibilité pour le moment.',
+        canProceed: false,
+        needsBypass: false,
+      };
     }
   }
 
@@ -317,6 +383,47 @@ export const usePlanningStore = defineStore('planning', () => {
     lastRuleMessage.value = null;
   }
 
+  // ── Vegetable-first search ──────────────────────────────────────────────────
+
+  function openVegetableSearch() {
+    vegetableSearchOpen.value = true;
+    plantableSections.value = [];
+    plantableSectionsError.value = null;
+  }
+
+  function closeVegetableSearch() {
+    vegetableSearchOpen.value = false;
+    plantableSections.value = [];
+    plantableSectionsError.value = null;
+  }
+
+  async function findPlantableSections(vegetableId: number, startDate: string, endDate: string) {
+    plantableSectionsLoading.value = true;
+    plantableSectionsError.value = null;
+    try {
+      const resp = await rotationsApi.getPlantableSections(vegetableId, startDate, endDate);
+      plantableSections.value = resp.data;
+    } catch {
+      plantableSectionsError.value = 'Impossible de trouver les sections disponibles.';
+    } finally {
+      plantableSectionsLoading.value = false;
+    }
+  }
+
+  function jumpToSection(
+    section: PlantableSection,
+    vegetableId: number,
+    startDate: string,
+    endDate: string,
+  ) {
+    closeVegetableSearch();
+    openSectionPanel(section.boardId, section.boardName, section.sectionNumber, {
+      startDate,
+      endDate,
+      vegetableId,
+    });
+  }
+
   return {
     // state
     soles,
@@ -334,12 +441,19 @@ export const usePlanningStore = defineStore('planning', () => {
     assignmentForm,
     assignmentLoading,
     lastRuleMessage,
+    sectionPlanCache,
+    vegetableSearchOpen,
+    plantableSections,
+    plantableSectionsLoading,
+    plantableSectionsError,
     // getters
     selectedSole,
     uniqueExploitations,
     boardsForSelectedSole,
+    boardSectionsCount,
     sectionDisplayMap,
     vegetableGroups,
+    plantableSectionsByBoard,
     // actions
     loadSoles,
     loadCulturePlan,
@@ -353,5 +467,9 @@ export const usePlanningStore = defineStore('planning', () => {
     checkVegetableCompatibility,
     submitAssignment,
     resetAssignmentForm,
+    openVegetableSearch,
+    closeVegetableSearch,
+    findPlantableSections,
+    jumpToSection,
   };
 });

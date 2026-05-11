@@ -1,4 +1,10 @@
-import { IsBoolean, IsInt, IsOptional, IsPositive } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsInt,
+  IsOptional,
+  IsPositive,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -38,4 +44,28 @@ export class PlantingValidationDto {
   @IsBoolean()
   @Type(() => Boolean)
   bypass?: boolean;
+
+  @ApiProperty({
+    description:
+      "Date de début de plantation pour vérifier la saisonnalité agronomique.",
+    example: '2026-04-15',
+    required: false,
+    type: String,
+    format: 'date',
+  })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiProperty({
+    description:
+      "Date de fin prévisionnelle de culture. Utilisée pour valider la cohérence du scénario.",
+    example: '2026-07-30',
+    required: false,
+    type: String,
+    format: 'date',
+  })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
 }

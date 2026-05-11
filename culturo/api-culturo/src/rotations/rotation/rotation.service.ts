@@ -46,6 +46,67 @@ function isError(error: unknown): error is Error {
   return error instanceof Error;
 }
 
+const SEASON_BY_MONTH: Record<number, 'hiver' | 'printemps' | 'ete' | 'automne'> = {
+  1: 'hiver',
+  2: 'hiver',
+  3: 'printemps',
+  4: 'printemps',
+  5: 'printemps',
+  6: 'ete',
+  7: 'ete',
+  8: 'ete',
+  9: 'automne',
+  10: 'automne',
+  11: 'automne',
+  12: 'hiver',
+};
+
+function normalizeSeasonLabel(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function seasonKeyFromDate(date: Date): 'hiver' | 'printemps' | 'ete' | 'automne' {
+  return SEASON_BY_MONTH[date.getUTCMonth() + 1];
+}
+
+function matchesSeasonWindow(date: Date, plantingSeason: string): boolean {
+  const normalized = normalizeSeasonLabel(plantingSeason);
+
+  if (
+    normalized.includes('toute') ||
+    normalized.includes('annee') ||
+    normalized.includes('all')
+  ) {
+    return true;
+  }
+
+  const knownSeasons: Array<'hiver' | 'printemps' | 'ete' | 'automne'> = [
+    'hiver',
+    'printemps',
+    'ete',
+    'automne',
+  ];
+
+  const allowed = knownSeasons.filter((season) => normalized.includes(season));
+
+  if (allowed.length === 0) {
+    return true;
+  }
+
+  return allowed.includes(seasonKeyFromDate(date));
+}
+
+function seasonLabelFromDate(date: Date): string {
+  const season = seasonKeyFromDate(date);
+  if (season === 'ete') return 'Été';
+  if (season === 'hiver') return 'Hiver';
+  if (season === 'automne') return 'Automne';
+  return 'Printemps';
+}
+
 @Injectable()
 export class RotationService {
   constructor(
@@ -128,6 +189,8 @@ export class RotationService {
     boardId: number,
     vegetableId: number,
     bypass = false,
+    startDate?: Date,
+    endDate?: Date,
   ) {
     const vegetable = await this.vegetableRepository.findOne({
       where: { id_vegetable: vegetableId },
@@ -148,8 +211,34 @@ export class RotationService {
 
     const isPrimary = family.family_importance.importance_name === 'primaire';
 
+    if (
+      startDate &&
+      endDate &&
+      !isNaN(startDate.getTime()) &&
+      !isNaN(endDate.getTime()) &&
+      startDate > endDate
+    ) {
+      return {
+        status: 'WARNING',
+        reason:
+          'RÈGLE 4: la date de début de plantation est postérieure à la date de fin prévue.',
+        neededBypass: false,
+      };
+    }
+
+    const seasonalityWarning =
+      startDate &&
+      !isNaN(startDate.getTime()) &&
+      !matchesSeasonWindow(startDate, vegetable.planting_season)
+        ? {
+            status: 'WARNING' as const,
+            reason: `RÈGLE 4: ${vegetable.vegetable_name} est référencé pour la saison « ${vegetable.planting_season} ». La date choisie correspond à la saison « ${seasonLabelFromDate(startDate)} ».`,
+            neededBypass: false,
+          }
+        : null;
+
     if (!isPrimary) {
-      return { status: 'OK' };
+      return seasonalityWarning ?? { status: 'OK' };
     }
 
     const fiveYearsAgo = new Date();
@@ -220,8 +309,7 @@ export class RotationService {
       };
     }
 
-    // OK
-    return { status: 'OK' };
+    return seasonalityWarning ?? { status: 'OK' };
   }
 
   /**

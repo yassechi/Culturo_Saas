@@ -13,6 +13,7 @@ import {
 import { Role } from './role.entity';
 import { Harvest } from './harvest.entity';
 import { Order } from './order.entity';
+import { Observation } from './observation.entity';
 
 @Entity()
 export class User_ {
@@ -64,4 +65,10 @@ export class User_ {
 
   @OneToMany(() => Order, (order) => order.user_)
   orders: Order[];
+
+  @OneToMany(() => Observation, (observation) => observation.author)
+  observations: Observation[];
+
+  @OneToMany(() => Observation, (observation) => observation.reviewer)
+  reviewedObservations: Observation[];
 }

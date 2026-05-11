@@ -4,6 +4,7 @@ import { Watering } from './watering.entity';
 import { Harvest } from './harvest.entity';
 import { Vegetable } from './vegetable.entity';
 import { Variety } from './variety.entity';
+import { Observation } from './observation.entity';
 
 @Entity()
 export class Section {
@@ -59,4 +60,7 @@ export class Section {
 
     @OneToMany(() => Watering, (watering) => watering.section)
     waterings: Watering[];
+
+    @OneToMany(() => Observation, (observation) => observation.section)
+    observations: Observation[];
 }

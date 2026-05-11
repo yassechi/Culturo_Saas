@@ -5,6 +5,7 @@ import { TreatmentModule } from './treatment/treatment.module';
 import { WateringModule } from './watering/watering.module';
 import { LegumeModule } from './vegetables/legume.module';
 import { HarvestModule } from './harvest/harvest.module';
+import { ObservationsModule } from './observations/observations.module';
 import { AppDataSourceOptions } from './data-source';
 import { UsersModule } from './users/users.module';
 import { OrderModule } from './order/order.module';
@@ -41,6 +42,7 @@ const envFilePath =
     RotationModule,
     AmendementModule,
     HarvestModule,
+    ObservationsModule,
     OrderModule,
     TreatmentModule,
     WateringModule,

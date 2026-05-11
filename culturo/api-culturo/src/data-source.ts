@@ -20,6 +20,7 @@ import { Sole } from './entities/sole.entity';
 import { Role } from './entities/role.entity';
 import 'reflect-metadata';
 import { Variety } from './entities/variety.entity';
+import { Observation } from './entities/observation.entity';
 
 export const AppDataSourceOptions: DataSourceOptions = {
   type: 'postgres',
@@ -49,6 +50,7 @@ export const AppDataSourceOptions: DataSourceOptions = {
     Treated,
     Treatment,
     Variety,
+    Observation,
   ],
   synchronize: true, // dev uniquement
 };

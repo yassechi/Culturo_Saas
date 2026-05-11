@@ -110,7 +110,7 @@ export class RotationController {
   @ApiOperation({
     summary: 'Vérifie si un légume peut être planté sur une planche',
     description:
-      'Vérifie les règles de rotation (5 ans) et de cohabitation (famille primaire unique)',
+      'Vérifie les règles de rotation (5 ans), de cohabitation (famille primaire unique) et la saisonnalité de plantation',
   })
   @ApiBody({
     type: PlantingValidationDto,
@@ -130,6 +130,8 @@ export class RotationController {
       body.boardId,
       body.vegetableId,
       !!body.bypass,
+      body.startDate ? new Date(body.startDate) : undefined,
+      body.endDate ? new Date(body.endDate) : undefined,
     );
   }
 

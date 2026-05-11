@@ -38,8 +38,23 @@ export interface PlantableVegetable {
 }
 
 export interface SectionPlanResult {
-  sectionPlan: { id_section_plan: number };
+  sectionPlan: {
+    id_section_plan: number;
+    number_of_section: number;
+    section_plan_active: boolean;
+    creation_date: string;
+  };
   status: 'CREATED' | 'FOUND';
+}
+
+export interface PlantableSection {
+  sectionPlanId: number;
+  boardId: number;
+  boardName: string;
+  sectionNumber: number;
+  totalSections: number;
+  lastPlantedVegetable: string | null;
+  neverPlanted: boolean;
 }
 
 export interface CanPlantResult {
@@ -86,4 +101,6 @@ export interface AssignmentForm {
 export interface RuleMessage {
   type: 'ok' | 'warning';
   text: string;
+  canProceed?: boolean;
+  needsBypass?: boolean;
 }

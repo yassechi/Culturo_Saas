@@ -1,17 +1,30 @@
 // culturo/front-culturo/src/api/rotations.ts
 import apiClient from './client';
-import type { CulturePlanEntry, PlantableVegetable, SectionPlanResult, CanPlantResult } from '@/types/planning';
+import type {
+  CulturePlanEntry,
+  PlantableVegetable,
+  PlantableSection,
+  SectionPlanResult,
+  CanPlantResult,
+} from '@/types/planning';
 
 export const rotationsApi = {
-  getCulturePlan(soleId: number, year: number) {
+  getCulturePlan(soleId: number, year: number, month?: number, periodMonths?: number) {
     return apiClient.get<CulturePlanEntry[]>(`/rotations/plan/${soleId}`, {
-      params: { year },
+      params: {
+        year,
+        ...(month !== undefined && { month }),
+        ...(periodMonths !== undefined && { periodMonths }),
+      },
     });
   },
 
-  createOrGetSectionPlan(boardId: number) {
+  createOrGetSectionPlan(boardId: number, numberOfSections?: number) {
     return apiClient.post<SectionPlanResult>(`/rotations/plan-section`, null, {
-      params: { boardId },
+      params: {
+        boardId,
+        ...(numberOfSections !== undefined && { numberOfSections }),
+      },
     });
   },
 
@@ -23,6 +36,12 @@ export const rotationsApi = {
   ) {
     return apiClient.get<PlantableVegetable[]>('/rotations/plantable-vegetables', {
       params: { sectionPlanId, sectionNumber, startDate, endDate },
+    });
+  },
+
+  getPlantableSections(vegetableId: number, startDate: string, endDate: string) {
+    return apiClient.get<PlantableSection[]>('/rotations/plantable-sections', {
+      params: { vegetableId, startDate, endDate },
     });
   },
 
@@ -40,7 +59,19 @@ export const rotationsApi = {
     return apiClient.post('/rotations/add-vegetable', dto);
   },
 
-  canPlantVegetable(boardId: number, vegetableId: number, bypass = false) {
-    return apiClient.post<CanPlantResult>('/rotations/can', { boardId, vegetableId, bypass });
+  canPlantVegetable(
+    boardId: number,
+    vegetableId: number,
+    startDate?: string,
+    endDate?: string,
+    bypass = false,
+  ) {
+    return apiClient.post<CanPlantResult>('/rotations/can', {
+      boardId,
+      vegetableId,
+      startDate,
+      endDate,
+      bypass,
+    });
   },
 };
