@@ -31,7 +31,7 @@ export class UsersService {
    * @returns
    */
   async getAllUsers(): Promise<User_[]> {
-    return await this.userRepository.find();
+    return await this.userRepository.find({ relations: ['role'] });
   }
 
   /**
@@ -121,7 +121,7 @@ export class UsersService {
       user.user_last_name = updateData.user_last_name;
 
     if (updateData.birth_day !== undefined)
-      user.birth_date = updateData.birth_day;
+      user.birth_date = new Date(updateData.birth_day);
 
     if (updateData.email !== undefined) user.email = updateData.email;
 
@@ -145,6 +145,7 @@ export class UsersService {
    */
   public async register(registerDto: RegisterDTO) {
     const { email, hpassword, id_role } = registerDto;
+    const birthDate = new Date(registerDto.birth_date);
 
     // Vérification email
     const userFromDb = await this.userRepository.findOne({ where: { email } });
@@ -162,6 +163,7 @@ export class UsersService {
     // Création user
     const newUser = this.userRepository.create({
       ...registerDto,
+      birth_date: birthDate,
       hpassword: hashedPassword,
       role: roleFromDb,
       id_role: roleFromDb.id_role,

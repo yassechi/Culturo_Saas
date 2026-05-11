@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsBoolean,
-  IsDate,
+  IsDateString,
   IsEmail,
   IsNotEmpty,
   IsNumber,
@@ -23,10 +23,10 @@ export class RegisterDTO {
   @ApiProperty({ description: "The user's first name" })
   user_first_name: string;
 
-  @IsDate()
+  @IsDateString()
   @IsNotEmpty()
-  @ApiProperty({ description: "The user's BirthDay" })
-  birth_date: Date;
+  @ApiProperty({ description: "The user's BirthDay", type: String, format: 'date' })
+  birth_date: string;
 
   @IsEmail()
   @IsNotEmpty()

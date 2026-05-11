@@ -255,3 +255,55 @@ Sol
 ---
 
 *Généré pour le projet de planification maraîchère — Développement Spec-Driven avec GitHub Spec Kit*
+
+---
+
+## État d'avancement — Audit du 2026-05-11
+
+### Phases terminées ✅
+
+| Phase | Statut |
+|---|---|
+| Phase 1 — Fondation & Architecture | ✅ Complet |
+| Phase 2 — Référentiel Botanique | ✅ Complet |
+| Phase 3 — Gestion du Sol et des Planches | ✅ Complet |
+
+### Phase 4 — Moteur de Planification (≈ 60%) 🔶
+
+**Fait :**
+- Règle 1 (rotation 5 ans) et Règle 2 (cohabitation familles primaires) implémentées dans `rotation.service.ts`
+- Endpoints : `GET /rotations/plan/:soleId`, `POST /rotations/can`, `GET /rotations/plantable-sections`, `GET /rotations/plantable-vegetables`, `POST /rotations/add-vegetable`
+- `PlanningView` avec grille calendrier fenêtre glissante 3 mois
+- `SectionSidePanel` (affectation légume/section) et `VegetableSearchPanel` (recherche inverse)
+
+**À faire :**
+- [ ] **Règle 3** — Détection des associations déconseillées dans une même planche
+- [ ] **Règle 4** — Alerte si plantation hors fenêtre saisonnière du légume
+- [ ] **Règle 5** — Suggestion d'engrais vert après culture à fort besoin en azote
+- [ ] **Règle 6** — Recommandation de jachère après N années d'occupation intensive
+- [ ] `CulturePlanView` — Vue lecture seule simplifiée pour le rôle stagiaire (actuellement `FeaturePlaceholder`)
+
+### Phase 5 — Historique, Observations et Traçabilité (≈ 40%) 🔶
+
+**Fait :**
+- `HistoryView` — historique multi-années avec filtres exploitation/sole/planche et alertes de rotation
+- Store `history.ts` avec calcul d'alertes côté client
+
+**À faire :**
+- [ ] Entité et endpoint **Observations terrain** côté backend (aucun endpoint dédié ; les entités `Watering`/`Treatment` ne couvrent pas les notes libres stagiaires)
+- [ ] `ObservationsView` — Saisie terrain pour les stagiaires (maladies, ravageurs, notes, état plante) — actuellement `FeaturePlaceholder`
+- [ ] Export **PDF / CSV** de l'historique
+- [ ] `DashboardView` — Enrichir avec stats réelles (taux d'occupation, alertes rotation année suivante)
+- [ ] Module `StatisticsModule` backend — entièrement vide, aucun service ni contrôleur
+
+### Phase 6 — Interface Pédagogique et Gestion des Utilisateurs (≈ 30%) 🔶
+
+**Fait :**
+- `AdminUsersView` — CRUD complet des utilisateurs avec gestion des rôles
+
+**À faire :**
+- [ ] `TrainerDashboardView` — Vue synthétique formateur (activité stagiaires, validations en attente) — actuellement `FeaturePlaceholder`
+- [ ] `ValidationView` — Interface de validation des saisies terrain par le formateur — actuellement `FeaturePlaceholder`
+- [ ] Mode explicatif pédagogique : afficher en langage naturel pourquoi une culture est bloquée
+- [ ] Notifications in-app (rappels plantation, alertes rotation, validations formateur)
+- [ ] Gestion des groupes / promotions de stagiaires

@@ -10,6 +10,12 @@
         </p>
       </div>
 
+      <div v-if="store.selectedSoleId && !auth.isStagiaire" class="hero-search-cta">
+        <button type="button" class="btn-veg-search" @click="store.openVegetableSearch()">
+          Trouver une section pour un légume →
+        </button>
+      </div>
+
       <div class="planning-hero-metrics" aria-label="Résumé de la planification">
         <article class="hero-metric">
           <span>Fenêtre</span>
@@ -70,6 +76,7 @@
     </div>
 
     <SectionSidePanel v-if="store.openSection" />
+    <VegetableSearchPanel v-if="store.vegetableSearchOpen" />
   </div>
 </template>
 
@@ -78,6 +85,7 @@ import { computed, ref, watch } from 'vue';
 import PlanSelector from '@/components/planning/PlanSelector.vue';
 import CulturePlanGrid from '@/components/planning/CulturePlanGrid.vue';
 import SectionSidePanel from '@/components/planning/SectionSidePanel.vue';
+import VegetableSearchPanel from '@/components/planning/VegetableSearchPanel.vue';
 import { useAuthStore } from '@/stores/auth';
 import { usePlanningStore } from '@/stores/planning';
 
@@ -174,8 +182,9 @@ watch(
 .planning-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
-  gap: 1rem 1.25rem;
-  align-items: stretch;
+  grid-template-rows: auto auto;
+  gap: 0.75rem 1.25rem;
+  align-items: start;
   margin: 0 1.5rem;
   padding: 1.35rem 1.45rem;
   border-radius: 28px;
@@ -191,6 +200,31 @@ watch(
   display: grid;
   gap: 0.55rem;
   max-width: 720px;
+  align-content: start;
+}
+
+.hero-search-cta {
+  grid-column: 1;
+  align-self: end;
+}
+
+.btn-veg-search {
+  padding: 0.65rem 1.1rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(74, 103, 65, 0.3);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--brand-deep);
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 160ms, border-color 160ms, transform 160ms;
+  box-shadow: 0 8px 18px rgba(58, 47, 24, 0.06);
+}
+
+.btn-veg-search:hover {
+  background: rgba(74, 103, 65, 0.1);
+  border-color: rgba(74, 103, 65, 0.45);
+  transform: translateY(-1px);
 }
 
 .planning-hero-eyebrow {
@@ -221,6 +255,9 @@ watch(
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.8rem;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: stretch;
 }
 
 .hero-metric {

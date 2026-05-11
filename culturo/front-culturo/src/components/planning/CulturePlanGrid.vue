@@ -209,6 +209,11 @@ const readonly = computed(() => auth.isStagiaire);
 const currentYear = new Date().getFullYear();
 const draftYear = ref<number | null>(props.year);
 
+const todayUtc = (() => {
+  const d = new Date();
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+})();
+
 const msPerDay = 24 * 60 * 60 * 1000;
 
 type MonthColumn = {
@@ -413,10 +418,16 @@ const planEntries = computed(() =>
 
 const boardRows = computed<TimelineBoardRow[]>(() =>
   store.boardsForSelectedSole.map((board) => {
-    const lanes = Array.from({ length: 3 }, (_, index) => {
+    const sectionCount = store.boardSectionsCount.get(board.id_board) ?? 3;
+    const lanes = Array.from({ length: sectionCount }, (_, index) => {
       const sectionNumber = index + 1;
       const entry = planEntries.value.find(
-        (item) => item.boardId === board.id_board && item.sectionNumber === sectionNumber,
+        (item) =>
+          item.boardId === board.id_board &&
+          item.sectionNumber === sectionNumber &&
+          toUtcDate(item.startDate) <= windowEndDate.value &&
+          toUtcDate(item.endDate) >= windowStartDate.value &&
+          toUtcDate(item.endDate) >= todayUtc,
       );
 
       if (!entry) {

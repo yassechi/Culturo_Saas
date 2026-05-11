@@ -5,7 +5,14 @@
       "Bash(git checkout *)",
       "Bash(powershell -File \".specify/scripts/powershell/update-agent-context.ps1\" -AgentType claude)",
       "Bash(powershell -File \".specify/scripts/powershell/check-prerequisites.ps1\" -Json)",
-      "Bash(powershell -File \".specify/scripts/powershell/check-prerequisites.ps1\" -Json -PathsOnly)"
+      "Bash(powershell -File \".specify/scripts/powershell/check-prerequisites.ps1\" -Json -PathsOnly)",
+      "Bash(powershell.exe *)",
+      "Bash(npx vue-tsc *)",
+      "Bash(xargs cat *)",
+      "Bash(npm install *)",
+      "Bash(docker exec *)",
+      "Bash(xargs grep *)",
+      "Bash(docker restart *)"
     ]
   }
 }

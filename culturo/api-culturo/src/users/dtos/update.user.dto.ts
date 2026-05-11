@@ -5,7 +5,7 @@ import {
   IsString,
   IsNumber,
   IsBoolean,
-  IsDate,
+  IsDateString,
 } from 'class-validator';
 export class UpdateUserDTO {
   @IsNumber()
@@ -23,9 +23,9 @@ export class UpdateUserDTO {
   user_last_name?: string;
 
   @IsOptional()
-  @IsDate()
-  @ApiProperty({ description: 'User birth date' })
-  birth_day?: Date;
+  @IsDateString()
+  @ApiProperty({ description: 'User birth date', type: String, format: 'date' })
+  birth_day?: string;
 
   @IsOptional()
   @IsEmail()
