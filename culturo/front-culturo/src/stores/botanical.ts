@@ -78,6 +78,17 @@ export const useBotanicalStore = defineStore('botanical', () => {
   const vegModalError = ref<string | null>(null);
   const vegModalLoading = ref(false);
 
+  // ── Vegetable colors (persisted in localStorage) ───────────────────────────
+  const COLORS_KEY = 'culturo:vegetable-colors';
+  const vegetableColors = ref<Record<number, string>>(
+    JSON.parse(localStorage.getItem(COLORS_KEY) ?? '{}'),
+  );
+
+  function setVegetableColor(vegetableId: number, color: string) {
+    vegetableColors.value[vegetableId] = color;
+    localStorage.setItem(COLORS_KEY, JSON.stringify(vegetableColors.value));
+  }
+
   // Variety panel (inline per vegetable)
   const expandedVegetableId = ref<number | null>(null);
   const varietiesMap = ref<Record<number, ApiVariety[]>>({});
@@ -372,6 +383,9 @@ export const useBotanicalStore = defineStore('botanical', () => {
     closeVegModal,
     submitVegModal,
     deleteVegetable,
+    vegetableColors,
+    setVegetableColor,
+    loadVarieties,
     toggleVarieties,
     addVariety,
     deleteVariety,

@@ -1,4 +1,4 @@
-import { CreateWateringDTO } from './dtos/create.watering.dto';
+import { CreateWateringDTO, CreateBulkWateringDTO } from './dtos/create.watering.dto';
 import { UpdateWateringDTO } from './dtos/update.watering.dto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Watering } from 'src/entities/watering.entity';
@@ -15,19 +15,28 @@ export class WateringService {
     private readonly sectionRepository: Repository<Section>,
   ) {}
 
-  /**
-   *
-   * @returns
-   */
   async findAll(): Promise<Watering[]> {
-    return await this.wateringRepository.find({ relations: ['section'] });
+    return this.wateringRepository.find({
+      relations: [
+        'section',
+        'section.vegetable',
+        'section.sectionPlan',
+        'section.sectionPlan.board',
+        'section.sectionPlan.board.sole',
+        'section.sectionPlan.board.sole.exploitation',
+      ],
+      order: { watering_date: 'DESC' },
+    });
   }
 
-  /**
-   *
-   * @param id
-   * @returns
-   */
+  async findBySection(sectionId: number): Promise<Watering[]> {
+    return this.wateringRepository.find({
+      where: { section: { id_section: sectionId } },
+      order: { watering_date: 'DESC' },
+      take: 20,
+    });
+  }
+
   async findOne(id: number): Promise<Watering> {
     const watering = await this.wateringRepository.findOne({
       where: { id_watering: id },
@@ -37,11 +46,6 @@ export class WateringService {
     return watering;
   }
 
-  /**
-   *
-   * @param dto
-   * @returns
-   */
   async create(dto: CreateWateringDTO): Promise<Watering> {
     const section = await this.sectionRepository.findOne({
       where: { id_section: dto.id_section },
@@ -49,19 +53,54 @@ export class WateringService {
     if (!section) throw new NotFoundException('Section not found');
 
     const watering = this.wateringRepository.create({
-      watering_date: dto.watering_date,
+      watering_date: new Date(dto.watering_date),
       section,
     });
 
-    return await this.wateringRepository.save(watering);
+    return this.wateringRepository.save(watering);
   }
 
-  /**
-   *
-   * @param id
-   * @param dto
-   * @returns
-   */
+  async createBulk(dto: CreateBulkWateringDTO): Promise<Watering[]> {
+    let sectionIds: number[] = dto.section_ids ?? [];
+
+    if (dto.board_id) {
+      const sections = await this.sectionRepository
+        .createQueryBuilder('section')
+        .innerJoin('section.sectionPlan', 'sp')
+        .innerJoin('sp.board', 'board')
+        .where('board.id_board = :boardId', { boardId: dto.board_id })
+        .andWhere('section.section_active = :active', { active: true })
+        .select('section.id_section')
+        .getMany();
+      sectionIds = sections.map((s) => s.id_section);
+    }
+
+    if (dto.sole_id) {
+      const sections = await this.sectionRepository
+        .createQueryBuilder('section')
+        .innerJoin('section.sectionPlan', 'sp')
+        .innerJoin('sp.board', 'board')
+        .innerJoin('board.sole', 'sole')
+        .where('sole.id_sole = :soleId', { soleId: dto.sole_id })
+        .andWhere('section.section_active = :active', { active: true })
+        .select('section.id_section')
+        .getMany();
+      sectionIds = sections.map((s) => s.id_section);
+    }
+
+    if (sectionIds.length === 0) return [];
+
+    const date = new Date(dto.watering_date);
+    const waterings = sectionIds.map((id) =>
+      this.wateringRepository.create({
+        watering_date: date,
+        section: { id_section: id },
+      }),
+    );
+
+    return this.wateringRepository.save(waterings);
+  }
+
   async update(id: number, dto: UpdateWateringDTO): Promise<Watering> {
     const watering = await this.findOne(id);
 
@@ -74,15 +113,11 @@ export class WateringService {
     }
 
     if (dto.watering_date !== undefined)
-      watering.watering_date = dto.watering_date;
+      watering.watering_date = new Date(dto.watering_date as unknown as string);
 
-    return await this.wateringRepository.save(watering);
+    return this.wateringRepository.save(watering);
   }
 
-  /**
-   *
-   * @param id
-   */
   async remove(id: number): Promise<void> {
     const watering = await this.findOne(id);
     await this.wateringRepository.remove(watering);

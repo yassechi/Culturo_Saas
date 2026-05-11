@@ -185,6 +185,24 @@
     </div>
 
     <!-- ════════════════════════════════════════════════════════════════════ -->
+    <!-- SATELLITE FRAME                                                       -->
+    <!-- ════════════════════════════════════════════════════════════════════ -->
+    <transition name="sat-slide">
+      <SatelliteFrame
+        v-if="selectedCoords"
+        :lat="selectedCoords.lat"
+        :lng="selectedCoords.lng"
+        :address="selectedCoords.address"
+        :locality="store.selectedExploitation?.exploitation_locality"
+        class="sat-frame-block"
+      />
+      <div v-else-if="store.selectedExploitationId" class="sat-no-coords">
+        <span>📍</span>
+        <span>Aucune position enregistrée pour cette exploitation. Modifiez-la pour placer un repère satellite.</span>
+      </div>
+    </transition>
+
+    <!-- ════════════════════════════════════════════════════════════════════ -->
     <!-- MODAL: Exploitation                                                  -->
     <!-- ════════════════════════════════════════════════════════════════════ -->
     <Teleport to="body">
@@ -395,6 +413,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useSoilBoardsStore } from '@/stores/soilBoards';
 import { useAuthStore } from '@/stores/auth';
 import SatelliteMapPicker from '@/components/SatelliteMapPicker.vue';
+import SatelliteFrame from '@/components/SatelliteFrame.vue';
 
 // ── Locality & Address autocomplete ─────────────────────────────────────────
 
@@ -559,6 +578,12 @@ const store = useSoilBoardsStore();
 const auth = useAuthStore();
 
 const currentUserId = computed(() => (auth.user as any)?.id ?? 1);
+
+const selectedCoords = computed(() => {
+  const id = store.selectedExploitationId;
+  if (!id) return null;
+  return store.exploitationCoords[id] ?? null;
+});
 
 onMounted(() => store.loadAll());
 
@@ -1156,5 +1181,33 @@ h1 {
   .view-header { flex-direction: column; }
   .panels { grid-template-columns: 1fr; }
   .form-grid-2 { grid-template-columns: 1fr; }
+}
+
+/* ── Satellite frame ────────────────────────────────────────────────────────── */
+.sat-frame-block {
+  margin-top: 1.5rem;
+}
+
+.sat-no-coords {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 16px;
+  border: 1px dashed rgba(39, 65, 53, 0.18);
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 0.84rem;
+  color: rgba(39, 65, 53, 0.5);
+}
+
+.sat-slide-enter-active,
+.sat-slide-leave-active {
+  transition: opacity 280ms ease, transform 280ms ease;
+}
+.sat-slide-enter-from,
+.sat-slide-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
 }
 </style>

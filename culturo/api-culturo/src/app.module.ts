@@ -1,3 +1,4 @@
+import { StatisticsModule } from './statistics/statistics.module';
 import { ExploitationModule } from './exploitations/exploitation.module';
 import { RotationModule } from './rotations/rotation/rotation.module';
 import { AmendementModule } from './amendement/amendement.module';
@@ -46,6 +47,7 @@ const envFilePath =
     OrderModule,
     TreatmentModule,
     WateringModule,
+    StatisticsModule,
   ],
 })
 export class AppModule {}

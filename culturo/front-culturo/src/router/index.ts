@@ -45,6 +45,30 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main', title: 'Historique' },
     },
     {
+      path: '/recoltes',
+      name: 'harvests',
+      component: () => import('@/views/HarvestHistoryView.vue'),
+      meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main', title: 'Récoltes' },
+    },
+    {
+      path: '/amendements',
+      name: 'amendements',
+      component: () => import('@/views/AmendementView.vue'),
+      meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main', title: 'Amendements' },
+    },
+    {
+      path: '/arrosages',
+      name: 'waterings',
+      component: () => import('@/views/WateringHistoryView.vue'),
+      meta: { requiresAuth: true, layout: 'main', title: 'Arrosages' },
+    },
+    {
+      path: '/traitements',
+      name: 'treatments',
+      component: () => import('@/views/TreatmentView.vue'),
+      meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main', title: 'Traitements' },
+    },
+    {
       path: '/admin/configuration',
       name: 'admin-config',
       component: () => import('@/views/ConfigurationView.vue'),

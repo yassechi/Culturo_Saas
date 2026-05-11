@@ -1,6 +1,10 @@
 <template>
   <component :is="currentLayout">
-    <router-view />
+    <router-view v-slot="{ Component }">
+      <keep-alive :max="6">
+        <component :is="Component" />
+      </keep-alive>
+    </router-view>
   </component>
 </template>
 

@@ -9,6 +9,9 @@ export class Amendement {
   @Column()
   amendment_name: string;
 
+  @Column({ type: 'text', nullable: true })
+  notice: string | null;
+
   @OneToMany(() => Amended, (amended) => amended.amendement)
   amendeds: Amended[];
 }

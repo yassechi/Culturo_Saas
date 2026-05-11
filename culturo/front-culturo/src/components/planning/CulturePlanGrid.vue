@@ -108,51 +108,92 @@
                   />
                 </div>
 
+                <!-- Slot disponible normal -->
                 <button
-                  v-if="lane.status === 'available'"
+                  v-if="lane.status === 'available' && !isWindowPast && !(lane as AvailableLane).blocked"
                   type="button"
                   class="lane-slot"
+                  :class="{ 'is-today-anchored': isCurrentYear && todayInWindow }"
+                  :style="isCurrentYear && todayInWindow
+                    ? { left: `${todayLeftPct}%`, width: `${100 - todayLeftPct}%` }
+                    : {}"
                   :disabled="readonly"
-                  @click="openSlot(row.board, lane.sectionNumber)"
+                  @click="openSlot(row.board, lane.sectionNumber, (lane as AvailableLane).minStartDate)"
                 >
                   <span class="slot-title">Disponible</span>
                   <span class="slot-note" v-if="!readonly">Cliquer pour planifier</span>
                 </button>
 
+                <!-- Slot bloqué : culture passée non récoltée hors fenêtre -->
                 <div
-                  v-else
+                  v-if="lane.status === 'available' && (lane as AvailableLane).blocked"
+                  class="lane-slot lane-slot-blocked"
+                >
+                  <span class="slot-title">⚠ À récolter</span>
+                  <span class="slot-note">{{ (lane as AvailableLane).blockingVegetable }} doit être récoltée</span>
+                </div>
+
+                <div
+                  v-else-if="lane.status === 'occupied'"
                   class="lane-bar"
-                  :class="{ 'is-clipped': lane.edgeState !== 'inside' }"
+                  :class="{
+                    'is-clipped': lane.edgeState !== 'inside',
+                    'is-ending-today': lane.isEndingToday && !readonly,
+                    'is-harvested': lane.isHarvested,
+                    'is-past-due': lane.isPastDue,
+                    'is-clickable': !lane.isHarvested,
+                  }"
+                  role="button"
                   tabindex="0"
-                  :aria-label="lane.tooltipTitle"
+                  :aria-label="lane.isHarvested ? lane.tooltipTitle : `${lane.tooltipTitle} — Cliquer pour récolter`"
                   :style="{
                     left: `${lane.left}%`,
                     width: `${lane.width}%`,
                     '--lane-accent': lane.accent,
                     '--lane-accent-dark': lane.accentDark,
                   }"
+                  @click="!lane.isHarvested && openOccupied(row.board, lane)"
+                  @keydown.enter="!lane.isHarvested && openOccupied(row.board, lane)"
                   >
                     <div class="bar-content" :class="`is-${lane.displaySize}`">
                     <span v-if="lane.displaySize !== 'tiny'" class="bar-line">
+                      <span v-if="lane.isHarvested" class="bar-harvest-icon" aria-label="Récoltée">🌾</span>
+                      <span v-if="lane.isPastDue" class="bar-pastdue-icon" aria-label="À récolter">⚠</span>
                       <span class="bar-name">{{ lane.vegetableName }}</span>
+                      <span v-if="lane.varietyName" class="bar-variety">{{ lane.varietyName }}</span>
                       <span class="bar-separator" aria-hidden="true">•</span>
-                      <span class="bar-dates">{{ formatDate(lane.startDate) }} - {{ formatDate(lane.endDate) }}</span>
+                      <span v-if="lane.isPastDue" class="bar-dates bar-dates-warn">À récolter</span>
+                      <span v-else class="bar-dates">{{ formatDate(lane.startDate) }} - {{ formatDate(lane.endDate) }}</span>
                     </span>
                     <span v-if="lane.displaySize === 'tiny'" class="bar-mini-name">
-                      {{ lane.vegetableName }}
+                      {{ lane.isHarvested ? '🌾 ' : lane.isPastDue ? '⚠ ' : '' }}{{ lane.vegetableName }}
                     </span>
                   </div>
 
                   <div class="bar-tooltip" :class="`is-${lane.tooltipPlacement}`" role="tooltip">
-                    <strong>{{ lane.vegetableName }}</strong>
+                    <strong>{{ lane.isHarvested ? '🌾 ' : lane.isPastDue ? '⚠ ' : '' }}{{ lane.vegetableName }}{{ lane.varietyName ? ` — ${lane.varietyName}` : '' }}</strong>
+                    <span v-if="lane.isHarvested" class="tooltip-harvested">Récoltée</span>
+                    <span v-if="lane.isPastDue" class="tooltip-pastdue">À récolter — cliquer pour déclarer</span>
                     <span>Plantation : {{ formatDate(lane.startDate) }}</span>
-                    <span>Fin : {{ formatDate(lane.endDate) }}</span>
+                    <span>Fin prévue : {{ formatDate(lane.endDate) }}</span>
                     <span>Durée : {{ lane.durationDays }} jour(s)</span>
                     <span>Repere : {{ row.board.board_name }} - section {{ lane.sectionNumber }}</span>
                     <span class="tooltip-hint">{{ lane.windowCoverage }}</span>
                     <span class="tooltip-suggestion">{{ lane.suggestion }}</span>
                   </div>
                 </div>
+
+                <!-- Slot disponible après la barre (si le légume se termine aujourd'hui) -->
+                <button
+                  v-if="lane.status === 'occupied' && lane.nextSlotLeft !== undefined && !readonly && !isWindowPast"
+                  type="button"
+                  class="lane-slot lane-slot-after"
+                  :style="{ left: `${lane.nextSlotLeft}%`, width: `${lane.nextSlotWidth}%` }"
+                  @click="openSlot(row.board, lane.sectionNumber, lane.nextMinStartDate)"
+                >
+                  <span class="slot-title">Disponible</span>
+                  <span class="slot-note">Cliquer pour planifier</span>
+                </button>
               </div>
             </div>
           </div>
@@ -188,6 +229,7 @@
 import { computed, ref, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { usePlanningStore } from '@/stores/planning';
+import { useBotanicalStore } from '@/stores/botanical';
 import type { BoardSummary, CulturePlanEntry } from '@/types/planning';
 
 const props = defineProps<{
@@ -205,16 +247,16 @@ const emit = defineEmits<{
 
 const store = usePlanningStore();
 const auth = useAuthStore();
+const botanical = useBotanicalStore();
 const readonly = computed(() => auth.isStagiaire);
 const currentYear = new Date().getFullYear();
 const draftYear = ref<number | null>(props.year);
 
-const todayUtc = (() => {
-  const d = new Date();
-  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-})();
-
 const msPerDay = 24 * 60 * 60 * 1000;
+
+const _now = new Date();
+const todayUtcMs = Date.UTC(_now.getUTCFullYear(), _now.getUTCMonth(), _now.getUTCDate());
+const todayIso = new Date(todayUtcMs).toISOString().slice(0, 10);
 
 type MonthColumn = {
   key: string;
@@ -230,11 +272,16 @@ type MonthSegment = MonthColumn & {
 type AvailableLane = {
   sectionNumber: number;
   status: 'available';
+  minStartDate?: string;
+  blocked?: boolean;
+  blockingVegetable?: string;
 };
 
 type OccupiedLane = {
   sectionNumber: number;
   status: 'occupied';
+  isHarvested: boolean;
+  isPastDue: boolean;
   left: number;
   width: number;
   displaySize: 'normal' | 'compact' | 'tiny';
@@ -243,12 +290,17 @@ type OccupiedLane = {
   startDate: string;
   endDate: string;
   vegetableName: string;
+  varietyName: string | null;
   durationDays: number;
   tooltipTitle: string;
   windowCoverage: string;
   suggestion: string;
   accent: string;
   accentDark: string;
+  isEndingToday: boolean;
+  nextSlotLeft?: number;
+  nextSlotWidth?: number;
+  nextMinStartDate?: string;
 };
 
 type TimelineLane = AvailableLane | OccupiedLane;
@@ -357,6 +409,22 @@ const windowEndDate = computed(() =>
   endOfMonthUtc(props.year, props.windowStartMonth + 2),
 );
 
+const isWindowPast = computed(() => windowEndDate.value.getTime() < todayUtcMs);
+const isCurrentYear = computed(() => props.year === new Date().getFullYear());
+
+const todayInWindow = computed(
+  () =>
+    todayUtcMs >= windowStartDate.value.getTime() &&
+    todayUtcMs <= windowEndDate.value.getTime(),
+);
+
+const todayLeftPct = computed(() => {
+  if (!todayInWindow.value) return 0;
+  const pct =
+    (diffDaysUtc(new Date(todayUtcMs), windowStartDate.value) / totalWindowDays.value) * 100;
+  return Math.max(0, Math.min(100, pct));
+});
+
 const totalWindowDays = computed(
   () => diffDaysUtc(windowEndDate.value, windowStartDate.value) + 1,
 );
@@ -416,21 +484,46 @@ const planEntries = computed(() =>
     }),
 );
 
-const boardRows = computed<TimelineBoardRow[]>(() =>
-  store.boardsForSelectedSole.map((board) => {
+const vegColorSnapshot = computed(() => ({ ...botanical.vegetableColors }));
+
+const boardRows = computed<TimelineBoardRow[]>(() => {
+  const colorMap = vegColorSnapshot.value;
+  return store.boardsForSelectedSole.map((board) => {
     const sectionCount = store.boardSectionsCount.get(board.id_board) ?? 3;
     const lanes = Array.from({ length: sectionCount }, (_, index) => {
       const sectionNumber = index + 1;
+      const isCurrentYear = props.year === new Date().getFullYear();
+
+      // Chercher une culture passée non récoltée (hors fenêtre visible) pour bloquer la plantation
+      const blockingEntry = isCurrentYear
+        ? planEntries.value.find(
+            (item) =>
+              item.boardId === board.id_board &&
+              item.sectionNumber === sectionNumber &&
+              !item.isHarvested &&
+              toUtcDate(item.endDate).getTime() < todayUtcMs &&
+              toUtcDate(item.endDate) < windowStartDate.value,
+          )
+        : undefined;
+
+      // Entry visible dans la fenêtre courante
       const entry = planEntries.value.find(
         (item) =>
           item.boardId === board.id_board &&
           item.sectionNumber === sectionNumber &&
           toUtcDate(item.startDate) <= windowEndDate.value &&
-          toUtcDate(item.endDate) >= windowStartDate.value &&
-          toUtcDate(item.endDate) >= todayUtc,
+          toUtcDate(item.endDate) >= windowStartDate.value,
       );
 
       if (!entry) {
+        if (blockingEntry) {
+          return {
+            sectionNumber,
+            status: 'available',
+            blocked: true,
+            blockingVegetable: blockingEntry.vegetableName,
+          } as TimelineLane;
+        }
         return {
           sectionNumber,
           status: 'available',
@@ -439,6 +532,24 @@ const boardRows = computed<TimelineBoardRow[]>(() =>
 
       const entryStart = toUtcDate(entry.startDate);
       const entryEnd = toUtcDate(entry.endDate);
+      const endMs = entryEnd.getTime();
+
+      // Culture terminée (endDate passée) :
+      // - si récoltée → section libre
+      // - si non récoltée → bloquer, afficher "À récolter"
+      if (isCurrentYear && endMs < todayUtcMs) {
+        if (entry.isHarvested) {
+          return {
+            sectionNumber,
+            status: 'available',
+            minStartDate: todayIso,
+          } as TimelineLane;
+        }
+        // Pas encore récoltée : afficher comme occupée avec isPastDue
+      }
+
+      const isPastDue = isCurrentYear && !entry.isHarvested && endMs < todayUtcMs;
+      const isEndingToday = isCurrentYear && endMs === todayUtcMs;
       const overlapsWindow = entryStart <= windowEndDate.value && entryEnd >= windowStartDate.value;
       const clampedStart = entryStart > windowStartDate.value ? entryStart : windowStartDate.value;
       const clampedEnd = entryEnd < windowEndDate.value ? entryEnd : windowEndDate.value;
@@ -451,7 +562,10 @@ const boardRows = computed<TimelineBoardRow[]>(() =>
       const width = overlapsWindow
         ? (diffDaysUtc(clampedEnd, clampedStart) / totalWindowDays.value) * 100
         : 8;
-      const palette = pickPalette(entry.vegetableName);
+      const storedColor = colorMap[entry.vegetableId] || null;
+      const palette = storedColor
+        ? { base: storedColor, dark: storedColor }
+        : pickPalette(entry.vegetableName);
       const clippedStart = entryStart < windowStartDate.value;
       const clippedEnd = entryEnd > windowEndDate.value;
       const displaySize = width < 10 ? 'tiny' : width < 18 ? 'compact' : 'normal';
@@ -461,6 +575,8 @@ const boardRows = computed<TimelineBoardRow[]>(() =>
       return {
         sectionNumber,
         status: 'occupied',
+        isHarvested: entry.isHarvested ?? false,
+        isPastDue,
         left,
         width,
         displaySize,
@@ -473,17 +589,34 @@ const boardRows = computed<TimelineBoardRow[]>(() =>
         startDate: entry.startDate,
         endDate: entry.endDate,
         vegetableName: entry.vegetableName,
+        varietyName: entry.varietyName ?? null,
         durationDays,
         tooltipTitle: [
-          entry.vegetableName,
+          entry.vegetableName + (entry.varietyName ? ` — ${entry.varietyName}` : ''),
           `Planche ${board.board_name}`,
           `Section ${sectionNumber}`,
-          `Du ${formatDate(entry.startDate)} au ${formatDate(entry.endDate)}`,
+          isPastDue ? '⚠ À récolter' : `Du ${formatDate(entry.startDate)} au ${formatDate(entry.endDate)}`,
         ].join(' - '),
         windowCoverage: getCoverageLabel(clippedStart, clippedEnd),
-        suggestion: getSuggestion(durationDays, clippedStart, clippedEnd),
-        accent: palette.base,
-        accentDark: palette.dark,
+        suggestion: isPastDue
+          ? 'Cette culture est terminée. Déclarez la récolte pour libérer la section.'
+          : getSuggestion(durationDays, clippedStart, clippedEnd),
+        accent: isPastDue ? '#b45309' : palette.base,
+        accentDark: isPastDue ? '#92400e' : palette.dark,
+        isEndingToday,
+        // Slot suivant uniquement si la culture est récoltée
+        ...(isEndingToday && entry.isHarvested && entryEnd < windowEndDate.value
+          ? (() => {
+              const nextDay = new Date(endMs + msPerDay);
+              const nextLeft = (diffDaysUtc(nextDay, windowStartDate.value) / totalWindowDays.value) * 100;
+              const nextWidth = 100 - nextLeft;
+              return {
+                nextSlotLeft: Math.max(0, Math.min(100, nextLeft)),
+                nextSlotWidth: Math.max(0, nextWidth),
+                nextMinStartDate: nextDay.toISOString().slice(0, 10),
+              };
+            })()
+          : {}),
       } as TimelineLane;
     });
 
@@ -492,8 +625,8 @@ const boardRows = computed<TimelineBoardRow[]>(() =>
       occupiedCount: lanes.filter((lane) => lane.status === 'occupied').length,
       lanes,
     };
-  }),
-);
+  });
+});
 
 function overlapsWindow(entry: CulturePlanEntry) {
   const entryStart = toUtcDate(entry.startDate);
@@ -501,10 +634,20 @@ function overlapsWindow(entry: CulturePlanEntry) {
   return entryStart <= windowEndDate.value && entryEnd >= windowStartDate.value;
 }
 
-function openSlot(board: BoardSummary, sectionNumber: number) {
+function openSlot(board: BoardSummary, sectionNumber: number, minStartDate?: string) {
   if (readonly.value) return;
+  const windowStr = windowStartDate.value.toISOString().slice(0, 10);
+  const rawStart = minStartDate ?? windowStr;
+  const defaultStart = rawStart < todayIso ? todayIso : rawStart;
   store.openSectionPanel(board.id_board, board.board_name, sectionNumber, {
-    startDate: windowStartDate.value.toISOString().slice(0, 10),
+    startDate: defaultStart,
+    endDate: windowEndDate.value.toISOString().slice(0, 10),
+  });
+}
+
+function openOccupied(board: BoardSummary, lane: OccupiedLane) {
+  store.openSectionPanel(board.id_board, board.board_name, lane.sectionNumber, {
+    startDate: todayIso,
     endDate: windowEndDate.value.toISOString().slice(0, 10),
   });
 }
@@ -513,10 +656,10 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
 <style scoped>
 .timeline-shell {
   display: grid;
-  gap: 1rem;
-  padding: 0 1.5rem 1.5rem;
-  --lane-label-width: 56px;
-  --lane-gap: 0.6rem;
+  gap: 0.5rem;
+  padding: 0 1.5rem 1rem;
+  --lane-label-width: 40px;
+  --lane-gap: 0.35rem;
   --nav-solid: var(--brand-deep);
   --nav-solid-hover: #355243;
   --nav-solid-ink: #f8f2e3;
@@ -807,7 +950,7 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
 
 .timeline-list {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.45rem;
   position: relative;
   z-index: 2;
   padding-inline: 1.45rem;
@@ -815,8 +958,8 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
 
 .board-row {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 0.65rem;
   align-items: stretch;
 }
 
@@ -846,9 +989,9 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.25rem;
-  padding: 1rem;
-  border-radius: 22px;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 16px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(250, 246, 237, 0.85));
   border: 1px solid rgba(39, 65, 53, 0.1);
   box-shadow: 0 10px 24px rgba(58, 47, 24, 0.06);
@@ -856,22 +999,22 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
 
 .board-card h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--brand-deep);
 }
 
 .board-card p {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   color: rgba(39, 65, 53, 0.68);
 }
 
 .board-track {
   position: relative;
   display: grid;
-  gap: 0.5rem;
-  padding: 0.75rem 0;
+  gap: 0.2rem;
+  padding: 0.3rem 0;
   overflow: visible;
 }
 
@@ -880,25 +1023,25 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
   grid-template-columns: var(--lane-label-width) minmax(0, 1fr);
   gap: var(--lane-gap);
   align-items: stretch;
-  min-height: 56px;
+  min-height: 34px;
 }
 
 .lane-label {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
+  border-radius: 10px;
   background: rgba(74, 103, 65, 0.12);
   color: var(--brand-deep);
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.04em;
 }
 
 .lane-track {
   position: relative;
-  min-height: 56px;
-  border-radius: 18px;
+  min-height: 34px;
+  border-radius: 12px;
   overflow: visible;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.52)),
@@ -932,26 +1075,26 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
 .lane-slot,
 .lane-bar {
   position: absolute;
-  top: 8px;
-  bottom: 8px;
-  border-radius: 16px;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 10px;
   z-index: 1;
 }
 
 .lane-slot {
-  inset-inline: 10px;
-  width: calc(100% - 20px);
+  inset-inline: 6px;
+  width: calc(100% - 12px);
   border: 1px dashed rgba(74, 103, 65, 0.38);
   background:
     linear-gradient(135deg, rgba(74, 103, 65, 0.08), rgba(244, 228, 193, 0.36)),
     rgba(74, 103, 65, 0.09);
   color: var(--brand-deep);
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 0.1rem;
-  padding: 0 1rem;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.6rem;
 }
 
 .lane-slot:disabled {
@@ -961,11 +1104,12 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
 
 .slot-title {
   font-weight: 800;
+  font-size: 0.72rem;
 }
 
 .slot-note {
-  font-size: 0.8rem;
-  color: rgba(39, 65, 53, 0.72);
+  font-size: 0.66rem;
+  color: rgba(39, 65, 53, 0.55);
 }
 
 .lane-bar {
@@ -986,6 +1130,114 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
   border: 2px dashed rgba(255, 255, 255, 0.55);
 }
 
+.lane-bar.is-ending-today {
+  opacity: 0.82;
+}
+
+.lane-bar.is-clickable {
+  cursor: pointer;
+}
+
+.lane-bar.is-clickable:hover {
+  filter: brightness(1.12);
+  transform: scaleY(1.04);
+  z-index: 2;
+}
+
+.lane-bar.is-clickable:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.lane-slot-blocked {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(180, 83, 9, 0.08),
+    rgba(180, 83, 9, 0.08) 6px,
+    rgba(180, 83, 9, 0.04) 6px,
+    rgba(180, 83, 9, 0.04) 12px
+  );
+  border: 1.5px dashed rgba(180, 83, 9, 0.35);
+  color: #92400e;
+  cursor: default;
+  pointer-events: none;
+}
+
+.lane-slot-blocked .slot-title {
+  color: #92400e;
+  font-weight: 800;
+}
+
+.lane-slot-blocked .slot-note {
+  color: rgba(146, 64, 14, 0.75);
+}
+
+.lane-bar.is-past-due {
+  animation: pastdue-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes pastdue-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.15); }
+}
+
+.bar-pastdue-icon {
+  font-size: 0.82em;
+  margin-right: 0.15em;
+  flex-shrink: 0;
+}
+
+.bar-dates-warn {
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.tooltip-pastdue {
+  display: inline-block;
+  background: rgba(180, 83, 9, 0.15);
+  color: #92400e;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.lane-bar.is-harvested {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--lane-accent),
+    var(--lane-accent) 6px,
+    var(--lane-accent-dark) 6px,
+    var(--lane-accent-dark) 12px
+  );
+  opacity: 0.72;
+}
+
+.bar-harvest-icon {
+  font-size: 0.82em;
+  margin-right: 0.15em;
+  flex-shrink: 0;
+}
+
+.tooltip-harvested {
+  display: inline-block;
+  background: rgba(180, 130, 20, 0.18);
+  color: #7a5a10;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.lane-slot-after,
+.lane-slot.is-today-anchored {
+  inset-inline: unset;
+}
+
 .lane-bar:hover,
 .lane-bar:focus-visible {
   transform: translateY(-2px);
@@ -1001,26 +1253,27 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0 1rem;
+  gap: 0.3rem;
+  padding: 0 0.6rem;
   border-radius: inherit;
   overflow: hidden;
   min-width: 0;
 }
 
 .bar-content.is-compact {
-  padding-inline: 0.8rem;
-  gap: 0.35rem;
+  padding-inline: 0.5rem;
+  gap: 0.25rem;
 }
 
 .bar-content.is-tiny {
   align-items: center;
   justify-content: center;
-  padding-inline: 0.55rem;
+  padding-inline: 0.35rem;
 }
 
 .bar-name {
   font-weight: 800;
+  font-size: 0.78rem;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
@@ -1030,11 +1283,22 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
 .bar-line {
   display: flex;
   align-items: baseline;
-  gap: 0.4rem;
+  gap: 0.3rem;
   min-width: 0;
   width: 100%;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.bar-variety {
+  font-size: 0.7rem;
+  font-weight: 600;
+  opacity: 0.78;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .bar-separator {
@@ -1043,7 +1307,7 @@ function openSlot(board: BoardSummary, sectionNumber: number) {
 }
 
 .bar-dates {
-  font-size: 0.76rem;
+  font-size: 0.68rem;
   opacity: 0.9;
   white-space: nowrap;
   overflow: hidden;

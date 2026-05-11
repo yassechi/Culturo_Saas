@@ -20,7 +20,7 @@ export const rotationsApi = {
   },
 
   createOrGetSectionPlan(boardId: number, numberOfSections?: number) {
-    return apiClient.post<SectionPlanResult>(`/rotations/plan-section`, null, {
+    return apiClient.post<SectionPlanResult>(`/rotations/plan-section`, undefined, {
       params: {
         boardId,
         ...(numberOfSections !== undefined && { numberOfSections }),

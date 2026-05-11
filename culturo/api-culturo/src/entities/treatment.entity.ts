@@ -9,6 +9,9 @@ export class Treatment {
   @Column()
   treatment_name: string;
 
+  @Column({ type: 'text', nullable: true })
+  notice: string | null;
+
   @OneToMany(() => Treated, (treated) => treated.treatment)
   treateds: Treated[];
 }

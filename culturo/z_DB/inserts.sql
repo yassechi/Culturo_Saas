@@ -202,12 +202,9 @@ BEGIN
         start_month := 1 + floor(random() * 12)::int;
         start_day := 1 + floor(random() * 28)::int;
         raw_start_date := make_date(plan_year, start_month, start_day);
-        IF raw_start_date > CURRENT_DATE THEN
-          raw_start_date := CURRENT_DATE - (floor(random() * 60)::int);
-        END IF;
         start_date := raw_start_date;
-        duration_days := 35 + floor(random() * 80)::int;
-        end_date := LEAST(start_date + duration_days, CURRENT_DATE);
+        duration_days := 45 + floor(random() * 120)::int;
+        end_date := start_date + duration_days;
         IF end_date < start_date THEN
           end_date := start_date;
         END IF;

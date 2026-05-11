@@ -1,106 +1,155 @@
-import { CreateAmendementDTO } from './dtos/create.amendement.dto';
-import { AmendedService } from './amendement.service';
-import { Amended } from '../entities/amended.entity';
-import { AuthChard } from '../users/guards/auth.guard';
-import { PermissionsGuard } from '../users/guards/permissions.guard';
-import { RequiertPermissions } from '../users/decorators/permissions.decorator';
 import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Param,
-  Body,
-  ParseIntPipe,
-  UseGuards,
+  Body, Controller, Delete, Get, Param, ParseIntPipe,
+  Post, Put, UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-  ApiBody,
-  ApiSecurity,
-} from '@nestjs/swagger';
-import { Permission } from 'src/users/permissions/permission.enum';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiSecurity } from '@nestjs/swagger';
+import { AmendedService } from './amendement.service';
+import { CreateAmendementDTO, CreateBulkAmendementDTO } from './dtos/create.amendement.dto';
+import { CreateCatalogueDTO, UpdateCatalogueDTO } from './dtos/catalogue.dto';
+import { Amended } from '../entities/amended.entity';
+import { Amendement } from '../entities/amendement.entity';
+import { AuthChard } from '../users/guards/auth.guard';
 
-@ApiTags('Amendements')
+// ── Catalogue des produits ────────────────────────────────────────────────────
+
+@ApiTags('Amendements — Catalogue')
+@Controller('amendements/catalogue')
+export class CatalogueController {
+  constructor(private readonly amendedService: AmendedService) {}
+
+  @Get()
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Liste tous les produits du catalogue' })
+  @ApiResponse({ status: 200, type: [Amendement] })
+  async findAll(): Promise<Amendement[]> {
+    return this.amendedService.findAllCatalogue();
+  }
+
+  @Get(':id')
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Récupère un produit du catalogue par ID' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 200, type: Amendement })
+  async findById(@Param('id', ParseIntPipe) id: number): Promise<Amendement> {
+    return this.amendedService.findCatalogueById(id);
+  }
+
+  @Post()
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Crée un produit dans le catalogue' })
+  @ApiBody({ type: CreateCatalogueDTO })
+  @ApiResponse({ status: 201, type: Amendement })
+  async create(@Body() dto: CreateCatalogueDTO): Promise<Amendement> {
+    return this.amendedService.createCatalogue(dto);
+  }
+
+  @Put(':id')
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Met à jour un produit du catalogue' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: UpdateCatalogueDTO })
+  @ApiResponse({ status: 200, type: Amendement })
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateCatalogueDTO,
+  ): Promise<Amendement> {
+    return this.amendedService.updateCatalogue(id, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Supprime un produit du catalogue' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204, description: 'Supprimé' })
+  async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    return this.amendedService.removeCatalogue(id);
+  }
+}
+
+// ── Applications d'amendements ────────────────────────────────────────────────
+
+@ApiTags('Amendements — Applications')
 @Controller('amendements')
 export class AmendedController {
   constructor(private readonly amendedService: AmendedService) {}
 
-    @Get()
-    @UseGuards(AuthChard)
-    @ApiSecurity('bearer')
-    @ApiOperation({ summary: 'Récupère tous les amendements' })
-    @ApiResponse({
-      status: 200,
-      description: 'Liste de tous les amendements',
-      type: [Amended],
-    })
-    async getAll(): Promise<Amended[]> {
-      return this.amendedService.getAllAmendements();
-    }
+  @Get()
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Récupère toutes les applications d\'amendement' })
+  @ApiResponse({ status: 200, type: [Amended] })
+  async findAll(): Promise<Amended[]> {
+    return this.amendedService.findAll();
+  }
+
+  @Get('board/:boardId')
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Récupère les amendements d\'une planche' })
+  @ApiParam({ name: 'boardId', type: Number })
+  @ApiResponse({ status: 200, type: [Amended] })
+  async findByBoard(@Param('boardId', ParseIntPipe) boardId: number): Promise<Amended[]> {
+    return this.amendedService.findByBoard(boardId);
+  }
 
   @Get(':id')
-@UseGuards(AuthChard)
-@ApiSecurity('bearer')
-@ApiOperation({ summary: 'Récupère un amendement par ID' })
-@ApiResponse({ status: 200, description: 'Amendement trouvé', type: Amended })
-@ApiResponse({ status: 404, description: 'Amendement non trouvé' })
-async getById(@Param('id', ParseIntPipe) id: number): Promise<Amended> {
-  return this.amendedService.getAmendedById(id);
-}
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Récupère une application par ID' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 200, type: Amended })
+  async findById(@Param('id', ParseIntPipe) id: number): Promise<Amended> {
+    return this.amendedService.findById(id);
+  }
 
   @Post()
-  @UseGuards(AuthChard, PermissionsGuard)
-  @RequiertPermissions(Permission.CREER_LEGUME)
+  @UseGuards(AuthChard)
   @ApiSecurity('bearer')
-  @ApiOperation({ summary: 'Crée un nouvel amendement' })
+  @ApiOperation({ summary: 'Enregistre un amendement pour une planche' })
   @ApiBody({ type: CreateAmendementDTO })
-  @ApiResponse({ status: 201, description: 'Amendement créé', type: Amended })
-  async create(@Body() payload: CreateAmendementDTO): Promise<Amended> {
-    return this.amendedService.createAmended(payload);
+  @ApiResponse({ status: 201, type: Amended })
+  async create(@Body() dto: CreateAmendementDTO): Promise<Amended> {
+    return this.amendedService.create(dto);
+  }
+
+  @Post('bulk')
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Amende toutes les planches actives d\'une sole' })
+  @ApiBody({ type: CreateBulkAmendementDTO })
+  @ApiResponse({ status: 201, type: [Amended] })
+  async createBulk(@Body() dto: CreateBulkAmendementDTO): Promise<Amended[]> {
+    return this.amendedService.createBulk(dto);
   }
 
   @Put(':id')
-  @UseGuards(AuthChard, PermissionsGuard)
-  @RequiertPermissions(Permission.MODIFIER_SUPPRIMER_LEGUME)
+  @UseGuards(AuthChard)
   @ApiSecurity('bearer')
-  @ApiOperation({ summary: 'Met à jour un amendement' })
-  @ApiParam({
-    name: 'id',
-    type: Number,
-    description: 'ID de l amendement à mettre à jour',
-  })
+  @ApiOperation({ summary: 'Met à jour une application d\'amendement' })
+  @ApiParam({ name: 'id', type: Number })
   @ApiBody({ type: CreateAmendementDTO })
-  @ApiResponse({
-    status: 200,
-    description: 'Amendement mis à jour',
-    type: Amended,
-  })
-  @ApiResponse({ status: 404, description: 'Amendement non trouvé' })
+  @ApiResponse({ status: 200, type: Amended })
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() payload: Partial<CreateAmendementDTO>,
+    @Body() dto: Partial<CreateAmendementDTO>,
   ): Promise<Amended> {
-    return this.amendedService.updateAmended(id, payload);
+    return this.amendedService.update(id, dto);
   }
 
   @Delete(':id')
-  @UseGuards(AuthChard, PermissionsGuard)
-  @RequiertPermissions(Permission.MODIFIER_SUPPRIMER_LEGUME)
+  @UseGuards(AuthChard)
   @ApiSecurity('bearer')
-  @ApiOperation({ summary: 'Supprime un amendement' })
-  @ApiParam({
-    name: 'id',
-    type: Number,
-    description: 'ID de l amendement à supprimer',
-  })
-  @ApiResponse({ status: 204, description: 'Amendement supprimé' })
-  @ApiResponse({ status: 404, description: 'Amendement non trouvé' })
-  async delete(@Param('id', ParseIntPipe) id: number): Promise<void> {
-    return this.amendedService.deleteAmended(id);
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Supprime une application d\'amendement' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204, description: 'Supprimé' })
+  async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    return this.amendedService.remove(id);
   }
 }

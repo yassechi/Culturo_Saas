@@ -10,11 +10,14 @@ export class Treated {
   @Column({ type: 'date' })
   treatment_date: Date;
 
-  @Column()
-  treatment_quantity: number;
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  treatment_quantity: number | null;
 
-  @Column()
-  treatment_unit: string;
+  @Column({ type: 'varchar', nullable: true })
+  treatment_unit: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
 
   @ManyToOne(() => Board, (board) => board.treateds)
   board: Board;

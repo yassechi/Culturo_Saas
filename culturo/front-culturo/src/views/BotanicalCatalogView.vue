@@ -140,14 +140,7 @@
             <tbody>
               <template v-for="veg in store.filteredVegetables" :key="veg.id_vegetable">
                 <tr class="veg-row">
-                  <td class="veg-name-cell">
-                    <button
-                      class="expand-btn"
-                      :class="{ expanded: store.expandedVegetableId === veg.id_vegetable }"
-                      @click="store.toggleVarieties(veg.id_vegetable)"
-                    >▶</button>
-                    {{ veg.vegetable_name }}
-                  </td>
+                  <td class="veg-name-cell">{{ veg.vegetable_name }}</td>
                   <td>
                     <span
                       class="importance-badge sm"
@@ -162,7 +155,15 @@
                   <td>{{ veg.inrow_distance }} / {{ veg.in_row_spacing }} cm</td>
                   <td>{{ veg.estimated_yield }} kg</td>
                   <td>
-                    <span class="variety-count">{{ veg.varieties?.length ?? 0 }}</span>
+                    <button
+                      class="variety-count-btn"
+                      :class="{ active: store.expandedVegetableId === veg.id_vegetable }"
+                      :title="store.expandedVegetableId === veg.id_vegetable ? 'Fermer les variétés' : 'Voir / ajouter des variétés'"
+                      @click="store.toggleVarieties(veg.id_vegetable)"
+                    >
+                      {{ veg.varieties?.length ?? 0 }}
+                      <span class="variety-count-icon">{{ store.expandedVegetableId === veg.id_vegetable ? '▲' : '▼' }}</span>
+                    </button>
                   </td>
                   <td class="actions-cell">
                     <button class="btn-icon" title="Modifier" @click="store.openEditVegetable(veg)">✏️</button>
@@ -216,6 +217,30 @@
                           >Ajouter</button>
                         </div>
                         <p v-if="store.varietyError" class="variety-err">{{ store.varietyError }}</p>
+
+                        <!-- Couleur de la barre planning -->
+                        <div class="color-picker-row">
+                          <span class="color-picker-label">Couleur planning</span>
+                          <div class="color-swatches">
+                            <button
+                              v-for="c in vegColorPalette"
+                              :key="c"
+                              type="button"
+                              class="color-swatch"
+                              :style="{ background: c }"
+                              :class="{ 'swatch-active': store.vegetableColors[veg.id_vegetable] === c }"
+                              :title="c"
+                              @click="store.setVegetableColor(veg.id_vegetable, c)"
+                            />
+                            <button
+                              v-if="store.vegetableColors[veg.id_vegetable]"
+                              type="button"
+                              class="color-swatch swatch-reset"
+                              title="Réinitialiser (couleur auto)"
+                              @click="store.setVegetableColor(veg.id_vegetable, '')"
+                            >↺</button>
+                          </div>
+                        </div>
                       </template>
                     </div>
                   </td>
@@ -373,6 +398,13 @@ function importanceClass(name?: string): string {
   if (!name) return 'imp-neutral';
   return IMPORTANCE_CLASSES[name.toLowerCase()] ?? 'imp-neutral';
 }
+
+const vegColorPalette = [
+  '#4f6d3c', '#7a4c32', '#315c73', '#8a5b99',
+  '#aa5534', '#2f7d6d', '#9b7036', '#526f8f',
+  '#c0392b', '#16a085', '#8e44ad', '#2980b9',
+  '#d35400', '#27ae60', '#7f8c8d', '#2c3e50',
+];
 
 function confirmDeleteFamily(id: number, name: string) {
   if (confirm(`Supprimer la famille "${name}" ?`)) store.deleteFamily(id);
@@ -703,28 +735,37 @@ h1 {
   font-weight: 700;
 }
 
-.expand-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 0.65rem;
-  color: rgba(39,65,53,0.45);
-  transition: transform 200ms;
-  padding: 0.15rem;
-  line-height: 1;
-}
-.expand-btn.expanded { transform: rotate(90deg); color: rgba(74,103,65,0.85); }
-
-.variety-count {
-  display: inline-block;
-  min-width: 1.4rem;
-  text-align: center;
-  padding: 0.1rem 0.45rem;
+.variety-count-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
   border-radius: 999px;
-  background: rgba(74,103,65,0.1);
+  border: 1.5px solid rgba(74,103,65,0.18);
+  background: rgba(74,103,65,0.08);
   color: rgba(39,65,53,0.75);
   font-weight: 700;
   font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 160ms, border-color 160ms, color 160ms;
+  white-space: nowrap;
+}
+
+.variety-count-btn:hover {
+  background: rgba(74,103,65,0.15);
+  border-color: rgba(74,103,65,0.35);
+  color: var(--brand-deep);
+}
+
+.variety-count-btn.active {
+  background: rgba(74,103,65,0.18);
+  border-color: rgba(74,103,65,0.4);
+  color: var(--brand-deep);
+}
+
+.variety-count-icon {
+  font-size: 0.6rem;
+  opacity: 0.6;
 }
 
 .actions-cell {
@@ -803,6 +844,59 @@ h1 {
   font-size: 0.82rem;
   color: rgba(39,65,53,0.5);
   font-style: italic;
+}
+
+.color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed rgba(39,65,53,0.12);
+}
+
+.color-picker-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(39,65,53,0.6);
+  white-space: nowrap;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 140ms, border-color 140ms, box-shadow 140ms;
+  padding: 0;
+}
+
+.color-swatch:hover {
+  transform: scale(1.2);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.color-swatch.swatch-active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2.5px rgba(39,65,53,0.6), 0 2px 8px rgba(0,0,0,0.2);
+  transform: scale(1.15);
+}
+
+.swatch-reset {
+  background: rgba(39,65,53,0.08) !important;
+  color: rgba(39,65,53,0.6);
+  font-size: 0.85rem;
+  line-height: 22px;
+  text-align: center;
 }
 
 .variety-err {

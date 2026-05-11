@@ -1,11 +1,15 @@
-import { CreateTreatedDTO } from './dtos/create.treatment.dto';
-import { UpdateTreatedDTO } from './dtos/update.treatment.dto';
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Treatment } from 'src/entities/treatment.entity';
 import { Treated } from 'src/entities/treated.entity';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Board } from 'src/entities/board.entity';
-import { Repository } from 'typeorm';
+import {
+  CreateTreatedDTO,
+  CreateBulkTreatedDTO,
+  CreateTreatmentCatalogueDTO,
+  UpdateTreatmentCatalogueDTO,
+} from './dtos/create.treatment.dto';
 
 @Injectable()
 export class TreatedService {
@@ -18,96 +22,112 @@ export class TreatedService {
     private readonly treatmentRepository: Repository<Treatment>,
   ) {}
 
-  /**
-   *
-   * @returns
-   */
+  // ── Catalogue ─────────────────────────────────────────────────────────────
+
+  async findAllCatalogue(): Promise<Treatment[]> {
+    return this.treatmentRepository.find({ order: { treatment_name: 'ASC' } });
+  }
+
+  async findCatalogueById(id: number): Promise<Treatment> {
+    const item = await this.treatmentRepository.findOne({ where: { id_treatment: id } });
+    if (!item) throw new NotFoundException(`Produit id ${id} introuvable`);
+    return item;
+  }
+
+  async createCatalogue(dto: CreateTreatmentCatalogueDTO): Promise<Treatment> {
+    const item = this.treatmentRepository.create({
+      treatment_name: dto.treatment_name,
+      notice: dto.notice ?? null,
+    });
+    return this.treatmentRepository.save(item);
+  }
+
+  async updateCatalogue(id: number, dto: UpdateTreatmentCatalogueDTO): Promise<Treatment> {
+    const item = await this.findCatalogueById(id);
+    if (dto.treatment_name !== undefined) item.treatment_name = dto.treatment_name;
+    if (dto.notice !== undefined) item.notice = dto.notice ?? null;
+    return this.treatmentRepository.save(item);
+  }
+
+  async removeCatalogue(id: number): Promise<void> {
+    const item = await this.findCatalogueById(id);
+    await this.treatmentRepository.remove(item);
+  }
+
+  // ── Applications ──────────────────────────────────────────────────────────
+
   async findAll(): Promise<Treated[]> {
-    return await this.treatedRepository.find({
-      relations: ['board', 'treatment'],
+    return this.treatedRepository.find({
+      relations: [
+        'treatment',
+        'board',
+        'board.sole',
+        'board.sole.exploitation',
+      ],
+      order: { treatment_date: 'DESC' },
     });
   }
 
-  /**
-   *
-   * @param id
-   * @returns
-   */
+  async findByBoard(boardId: number): Promise<Treated[]> {
+    return this.treatedRepository.find({
+      where: { board: { id_board: boardId } },
+      relations: ['treatment'],
+      order: { treatment_date: 'DESC' },
+      take: 20,
+    });
+  }
+
   async findOne(id: number): Promise<Treated> {
     const treated = await this.treatedRepository.findOne({
       where: { id_treated: id },
-      relations: ['board', 'treatment'],
+      relations: ['treatment', 'board', 'board.sole', 'board.sole.exploitation'],
     });
-    if (!treated) throw new NotFoundException('Treated record not found');
+    if (!treated) throw new NotFoundException('Traitement non trouvé');
     return treated;
   }
 
-  /**
-   *
-   * @param dto
-   * @returns
-   */
   async create(dto: CreateTreatedDTO): Promise<Treated> {
-    const board = await this.boardRepository.findOne({
-      where: { id_board: dto.id_board },
-    });
-    if (!board) throw new NotFoundException('Board not found');
+    const board = await this.boardRepository.findOne({ where: { id_board: dto.id_board } });
+    if (!board) throw new NotFoundException(`Planche id ${dto.id_board} introuvable`);
 
-    const treatment = await this.treatmentRepository.findOne({
-      where: { id_treatment: dto.id_treatment },
-    });
-    if (!treatment) throw new NotFoundException('Treatment not found');
+    const treatment = await this.treatmentRepository.findOne({ where: { id_treatment: dto.id_treatment } });
+    if (!treatment) throw new NotFoundException(`Produit id ${dto.id_treatment} introuvable`);
 
     const treated = this.treatedRepository.create({
-      treatment_date: dto.treatment_date,
-      treatment_quantity: dto.treatment_quantity,
-      treatment_unit: dto.treatment_unit,
+      treatment_date: dto.treatment_date as unknown as Date,
+      treatment_quantity: dto.treatment_quantity ?? null,
+      treatment_unit: dto.treatment_unit ?? null,
+      description: dto.description ?? null,
       board,
       treatment,
     });
 
-    return await this.treatedRepository.save(treated);
+    return this.treatedRepository.save(treated);
   }
 
-  /**
-   *
-   * @param id
-   * @param dto
-   * @returns
-   */
-  async update(id: number, dto: UpdateTreatedDTO): Promise<Treated> {
-    const treated = await this.findOne(id);
+  async createBulk(dto: CreateBulkTreatedDTO): Promise<Treated[]> {
+    const treatment = await this.treatmentRepository.findOne({ where: { id_treatment: dto.id_treatment } });
+    if (!treatment) throw new NotFoundException(`Produit id ${dto.id_treatment} introuvable`);
 
-    if (dto.boardId) {
-      const board = await this.boardRepository.findOne({
-        where: { id_board: dto.boardId },
-      });
-      if (!board) throw new NotFoundException('Board not found');
-      treated.board = board;
-    }
+    const boards = await this.boardRepository.find({
+      where: { sole: { id_sole: dto.id_sole }, board_active: true },
+    });
+    if (boards.length === 0) return [];
 
-    if (dto.treatmentId) {
-      const treatment = await this.treatmentRepository.findOne({
-        where: { id_treatment: dto.treatmentId },
-      });
-      if (!treatment) throw new NotFoundException('Treatment not found');
-      treated.treatment = treatment;
-    }
+    const records = boards.map((board) =>
+      this.treatedRepository.create({
+        treatment_date: dto.treatment_date as unknown as Date,
+        treatment_quantity: dto.treatment_quantity ?? null,
+        treatment_unit: dto.treatment_unit ?? null,
+        description: dto.description ?? null,
+        board,
+        treatment,
+      }),
+    );
 
-    if (dto.treatment_date !== undefined)
-      treated.treatment_date = dto.treatment_date;
-    if (dto.treatment_quantity !== undefined)
-      treated.treatment_quantity = dto.treatment_quantity;
-    if (dto.treatment_unit !== undefined)
-      treated.treatment_unit = dto.treatment_unit;
-
-    return await this.treatedRepository.save(treated);
+    return this.treatedRepository.save(records);
   }
 
-  /**
-   *
-   * @param id
-   */
   async remove(id: number): Promise<void> {
     const treated = await this.findOne(id);
     await this.treatedRepository.remove(treated);

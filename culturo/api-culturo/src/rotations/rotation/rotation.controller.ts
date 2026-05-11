@@ -208,7 +208,7 @@ export class RotationController {
   ): Promise<PlantableVegetableDto[]> {
     const start = new Date(startDateStr);
     const end = new Date(endDateStr);
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
       throw new BadRequestException('Dates invalides ou incohérentes');
     }
     return this.rotationService.findPlantableVegetables(
@@ -255,7 +255,7 @@ export class RotationController {
     initialSections?: number,
   ): Promise<PlanResult> {
     try {
-      const numberOfSections = initialSections ?? 4;
+      const numberOfSections = initialSections ?? 3;
 
       if (numberOfSections <= 0) {
         throw new BadRequestException(

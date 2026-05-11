@@ -35,8 +35,12 @@ type PlantingResult = PlantingSuccess | PlantingWarning;
 interface RawCulturePlanResult {
   board_id_board: number;
   board_board_name: string;
+  section_id_section: number;
   section_section_number: number;
+  section_section_active: boolean;
+  vegetable_id_vegetable: number;
   vegetable_vegetable_name: string;
+  variety_variety_name: string | null;
   section_start_date: Date;
   section_end_date: Date;
 }
@@ -150,6 +154,7 @@ export class RotationService {
     const results: RawCulturePlanResult[] = await this.sectionRepository
       .createQueryBuilder('section')
       .leftJoin('section.vegetable', 'vegetable')
+      .leftJoin('section.variety', 'variety')
       .leftJoin('section.sectionPlan', 'sectionPlan')
       .leftJoin('sectionPlan.board', 'board')
       .leftJoin('board.sole', 'sole')
@@ -159,8 +164,12 @@ export class RotationService {
       .select([
         'board.id_board',
         'board.board_name',
+        'section.id_section',
         'section.section_number',
+        'section.section_active',
+        'vegetable.id_vegetable',
         'vegetable.vegetable_name',
+        'variety.variety_name',
         'section.start_date',
         'section.end_date',
       ])
@@ -171,8 +180,12 @@ export class RotationService {
     return results.map((r) => ({
       boardId: r.board_id_board,
       boardName: r.board_board_name,
+      sectionId: r.section_id_section,
       sectionNumber: r.section_section_number,
+      isHarvested: !r.section_section_active,
+      vegetableId: r.vegetable_id_vegetable,
       vegetableName: r.vegetable_vegetable_name,
+      varietyName: r.variety_variety_name ?? null,
       startDate: r.section_start_date,
       endDate: r.section_end_date,
     }));
@@ -265,6 +278,10 @@ export class RotationService {
     let alreadyPlantedIn5Years = false;
     let hasActivePrimaryFamily = false;
 
+    // Date de référence : début de la nouvelle culture (ou aujourd'hui si non précisé)
+    const refDate = startDate ?? new Date();
+    const refDateUtc = new Date(Date.UTC(refDate.getFullYear(), refDate.getMonth(), refDate.getDate()));
+
     for (const section of sections) {
       const secVegetable = section.vegetable;
       if (!secVegetable?.family?.family_importance) continue;
@@ -273,19 +290,25 @@ export class RotationService {
       const secIsPrimary =
         secVegetable.family.family_importance.importance_name === 'primaire';
 
-      // RÈGLE 1 — Rotation 5 ans (MÊME famille)
-      if (
-        !section.section_active &&
-        section.end_date &&
-        secFamilyId === family.id_family
-      ) {
+      const sectionEndUtc = new Date(Date.UTC(
+        new Date(section.end_date).getUTCFullYear(),
+        new Date(section.end_date).getUTCMonth(),
+        new Date(section.end_date).getUTCDate(),
+      ));
+
+      // Une culture est "terminée" si sa date de fin est antérieure au début de la nouvelle culture
+      const isEnded = sectionEndUtc < refDateUtc;
+
+      // RÈGLE 1 — Rotation 5 ans : même famille, déjà terminée dans les 5 dernières années
+      if (isEnded && section.end_date && secFamilyId === family.id_family) {
         alreadyPlantedIn5Years = true;
       }
 
-      // RÈGLE 2 — Cohabitation (TOUTE famille primaire ACTIVE)
-      if (section.section_active === true && secIsPrimary) {
+      // RÈGLE 2 — Cohabitation : famille primaire dont la culture chevauche la nouvelle période
+      if (!isEnded && secIsPrimary) {
         hasActivePrimaryFamily = true;
       }
+
       if (alreadyPlantedIn5Years && hasActivePrimaryFamily) {
         break;
       }
@@ -366,14 +389,17 @@ export class RotationService {
             continue;
           }
 
-          // RÈGLE 1 : Cohabitation de familles primaires actives
-          if (section.section_active && section.vegetable.family) {
+          // RÈGLE 1 : Cohabitation de familles primaires — chevauchement avec la période demandée
+          if (section.vegetable.family) {
             const activeFamilyId = section.vegetable.family.id_family;
             const isActivePrimary =
               section.vegetable.family.family_importance?.importance_name ===
               'primaire';
+            const overlaps =
+              new Date(section.end_date) > startDate &&
+              new Date(section.start_date) < endDate;
 
-            if (isActivePrimary && activeFamilyId !== targetFamilyId) {
+            if (isActivePrimary && overlaps && activeFamilyId !== targetFamilyId) {
               isBoardAccessible = false;
               break;
             }
@@ -420,10 +446,9 @@ export class RotationService {
               continue;
             }
 
-            // RÈGLE SECTION : Occupation physique "chevauchent"
+            // Occupation physique stricte (fin exclusive)
             const isOccupiedDuringPeriod =
-              section.section_active ||
-              (section.start_date <= endDate && section.end_date >= startDate);
+              new Date(section.start_date) < endDate && new Date(section.end_date) > startDate;
 
             if (isOccupiedDuringPeriod) {
               isSectionPlantable = false;
@@ -477,16 +502,10 @@ export class RotationService {
     endDate: Date,
   ): Promise<PlantableVegetableDto[]> {
     try {
-      // 1. Récupérer le SectionPlan avec toutes ses sections
+      // 1. Récupérer le SectionPlan pour obtenir le boardId et valider le numéro de section
       const sectionPlan = await this.sectionPlanRepository.findOne({
         where: { id_section_plan: sectionPlanId },
-        relations: [
-          'board',
-          'sections',
-          'sections.vegetable',
-          'sections.vegetable.family',
-          'sections.vegetable.family.family_importance',
-        ],
+        relations: ['board'],
       });
 
       if (!sectionPlan) {
@@ -499,60 +518,79 @@ export class RotationService {
         );
       }
 
-      // Occupation physique
-      const sectionsAtLocation = sectionPlan.sections.filter(
+      const boardId = sectionPlan.board.id_board;
+
+      // 2. Charger TOUTES les sections du board (tous plans confondus)
+      //    pour avoir un historique complet de la rotation
+      const allBoardSections = await this.sectionRepository
+        .createQueryBuilder('section')
+        .leftJoinAndSelect('section.vegetable', 'vegetable')
+        .leftJoinAndSelect('vegetable.family', 'family')
+        .leftJoinAndSelect('family.family_importance', 'importance')
+        .innerJoin('section.sectionPlan', 'sp')
+        .innerJoin('sp.board', 'board')
+        .where('board.id_board = :boardId', { boardId })
+        .getMany();
+
+      // 3. Occupation physique : chevauchement strict (fin exclusive)
+      //    Un végétal se terminant exactement le jour du début de la nouvelle culture
+      //    n'est PAS considéré comme occupant encore la section.
+      const sectionsAtLocation = allBoardSections.filter(
         (s) => s.section_number === sectionNumber,
       );
 
       for (const section of sectionsAtLocation) {
         if (!section.vegetable) continue;
-
-        const isOccupiedDuringPeriod =
-          section.section_active ||
-          (section.start_date <= endDate && section.end_date >= startDate);
-
-        if (isOccupiedDuringPeriod) {
+        const sd = new Date(section.start_date);
+        const ed = new Date(section.end_date);
+        const isOccupied = sd < endDate && ed > startDate;
+        if (isOccupied) {
           return [];
         }
       }
 
-      // Borad
+      // 4. Construire l'historique de rotation à partir de l'ensemble du board
       const fiveYearsAgo = new Date(startDate);
       fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
 
-      // Familles primaires actuellement actives sur la board
       const activePrimaryFamilies = new Set<number>();
-
-      // Familles primaires plantées dans les 5 dernières années sur la board
       const recentPrimaryFamilies = new Set<number>();
 
-      for (const section of sectionPlan.sections) {
-        if (!section.vegetable?.family) continue;
+      for (const section of allBoardSections) {
+        if (!section.vegetable?.family?.family_importance) continue;
 
         const familyId = section.vegetable.family.id_family;
         const isPrimary =
-          section.vegetable.family.family_importance?.importance_name ===
-          'primaire';
+          section.vegetable.family.family_importance.importance_name === 'primaire';
 
         if (!isPrimary) continue;
 
-        // Collecter les familles primaires actives
-        if (section.section_active) {
+        // Famille active si elle chevauche strictement la nouvelle période
+        if (
+          new Date(section.end_date) > startDate &&
+          new Date(section.start_date) < endDate
+        ) {
           activePrimaryFamilies.add(familyId);
         }
 
-        // Collecter les familles primaires récentes (5 ans)
-        if (section.end_date >= fiveYearsAgo) {
+        // Famille plantée dans les 5 dernières années
+        if (new Date(section.end_date) > fiveYearsAgo) {
           recentPrimaryFamilies.add(familyId);
         }
       }
 
-      // legumes Board
-      const allVegetables = await this.vegetableRepository.find({
-        relations: ['family', 'family.family_importance'],
-      });
+      // 5. Filtrer les légumes selon les règles de rotation
+      const allVegetables = await this.vegetableRepository
+        .createQueryBuilder('veg')
+        .leftJoinAndSelect('veg.family', 'family')
+        .leftJoinAndSelect('family.family_importance', 'fi')
+        .getMany();
 
-      // Filter les légumes
+      // Dernier légume planté à cet emplacement (pour affichage)
+      const lastSectionAtLocation = sectionsAtLocation
+        .filter((s) => s.vegetable)
+        .sort((a, b) => new Date(b.end_date).getTime() - new Date(a.end_date).getTime())[0];
+
       const plantableVegetables: PlantableVegetableDto[] = [];
 
       for (const vegetable of allVegetables) {
@@ -564,14 +602,14 @@ export class RotationService {
 
         let isPlantable = true;
 
-        //Cohabitation
+        // Règle cohabitation : une seule famille primaire active à la fois
         if (isPrimary && activePrimaryFamilies.size > 0) {
           if (!activePrimaryFamilies.has(familyId)) {
             isPlantable = false;
           }
         }
 
-        // Rotation 5 ans
+        // Règle rotation 5 ans : même famille primaire récemment plantée
         if (isPrimary && recentPrimaryFamilies.has(familyId)) {
           isPlantable = false;
         }
@@ -583,12 +621,8 @@ export class RotationService {
             familyId: vegetable.family.id_family,
             familyName: vegetable.family.family_name,
             importance: vegetable.family.family_importance.importance_name,
-            lastPlantedInSection:
-              sectionsAtLocation.length > 0
-                ? (sectionsAtLocation[sectionsAtLocation.length - 1].vegetable
-                    ?.vegetable_name ?? null)
-                : null,
-            neverPlantedInSection: sectionsAtLocation.length === 0,
+            lastPlantedInSection: lastSectionAtLocation?.vegetable?.vegetable_name ?? null,
+            neverPlantedInSection: sectionsAtLocation.filter((s) => s.vegetable).length === 0,
           });
         }
       }
@@ -688,8 +722,8 @@ export class RotationService {
     boardId: number,
     sectionNumber: number,
     vegetableId: number,
-    startDate: Date,
-    endDate: Date,
+    startDate: Date | string,
+    endDate: Date | string,
     quantityPlanted: number = 0,
     bypass: boolean = false,
     unity: string,
@@ -697,6 +731,11 @@ export class RotationService {
     numberOfSection: number, // PARAMÈTRE RÉINTRODUIT ET UTILISÉ
   ): Promise<PlantingResult> {
     try {
+      const start = startDate instanceof Date ? startDate : new Date(startDate);
+      const end = endDate instanceof Date ? endDate : new Date(endDate);
+      startDate = start;
+      endDate = end;
+
       // 1. Vérification du Légume et Gestion de la variété (INCHANGÉ)
       const vegetable = await this.vegetableRepository.findOne({
         where: { id_vegetable: vegetableId },
@@ -774,18 +813,18 @@ export class RotationService {
         );
       }
 
-      // 4. Occupation de la section (INCHANGÉ)
-      const existingActiveSection = await this.sectionRepository.findOne({
-        where: {
-          sectionPlan: { id_section_plan: currentSectionPlan.id_section_plan },
-          section_number: sectionNumber,
-          section_active: true,
-        },
-        relations: ['vegetable'],
-      });
+      // 4. Occupation de la section — chevauchement de dates
+      const existingActiveSection = await this.sectionRepository
+        .createQueryBuilder('section')
+        .innerJoin('section.sectionPlan', 'sp')
+        .where('sp.id_section_plan = :planId', { planId: currentSectionPlan.id_section_plan })
+        .andWhere('section.section_number = :num', { num: sectionNumber })
+        .andWhere('section.start_date < :endDate', { endDate })
+        .andWhere('section.end_date > :startDate', { startDate })
+        .getOne();
       if (existingActiveSection) {
         throw new BadRequestException(
-          `Une section active existe déjà avec le numéro ${sectionNumber}.`,
+          `Cette section est déjà occupée sur la période demandée.`,
         );
       }
 

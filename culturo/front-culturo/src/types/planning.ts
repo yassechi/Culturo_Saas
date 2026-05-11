@@ -21,8 +21,12 @@ export interface SoleWithBoards {
 export interface CulturePlanEntry {
   boardId: number;
   boardName: string;
+  sectionId: number;
   sectionNumber: number;
+  isHarvested: boolean;
+  vegetableId: number;
   vegetableName: string;
+  varietyName: string | null;
   startDate: string;
   endDate: string;
 }

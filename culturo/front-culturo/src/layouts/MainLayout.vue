@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'sidebar-collapsed': !sidebarOpen }">
     <aside class="sidebar">
       <div class="brand-block">
         <span class="eyebrow">Plateforme de planification</span>
@@ -29,9 +29,22 @@
 
     <section class="content-shell">
       <header class="topbar">
-        <div>
-          <span class="eyebrow">Culturo SaaS</span>
-          <h2>{{ route.meta.title ?? 'Tableau de bord' }}</h2>
+        <div class="topbar-left">
+          <button
+            class="sidebar-toggle"
+            type="button"
+            :aria-label="sidebarOpen ? 'Masquer la navigation' : 'Afficher la navigation'"
+            :title="sidebarOpen ? 'Masquer la navigation' : 'Afficher la navigation'"
+            @click="toggleSidebar"
+          >
+            <span class="toggle-bar" />
+            <span class="toggle-bar" />
+            <span class="toggle-bar" />
+          </button>
+          <div>
+            <span class="eyebrow">Culturo SaaS</span>
+            <h2>{{ route.meta.title ?? 'Tableau de bord' }}</h2>
+          </div>
         </div>
         <button class="ghost-button" type="button" @click="handleRefresh">
           Rafraîchir le profil
@@ -44,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 
@@ -53,6 +66,21 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
+const SIDEBAR_KEY = 'culturo:sidebar-open';
+
+function getInitialSidebarState(): boolean {
+  const stored = localStorage.getItem(SIDEBAR_KEY);
+  if (stored !== null) return stored !== 'false';
+  return window.innerWidth > 920;
+}
+
+const sidebarOpen = ref(getInitialSidebarState());
+
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value;
+  localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen.value));
+}
+
 const navItems = computed(() => {
   if (auth.isAdmin) {
     return [
@@ -60,6 +88,10 @@ const navItems = computed(() => {
       { to: '/admin/botanique', label: 'Referentiel botanique', caption: 'Phase 2' },
       { to: '/admin/sol-planches', label: 'Sol & planches', caption: 'Phase 3' },
       { to: '/plan', label: 'Planification', caption: 'Phase 4' },
+      { to: '/recoltes', label: 'Récoltes', caption: 'Phase 4' },
+      { to: '/arrosages', label: 'Arrosages', caption: 'Phase 4' },
+      { to: '/amendements', label: 'Amendements', caption: 'Phase 4' },
+      { to: '/traitements', label: 'Traitements', caption: 'Phase 4' },
       { to: '/historique', label: 'Historique', caption: 'Phase 5' },
       { to: '/admin/configuration', label: 'Configuration', caption: 'Fondation' },
     ];
@@ -68,6 +100,10 @@ const navItems = computed(() => {
   if (auth.isFormateur) {
     return [
       { to: '/plan', label: 'Planification', caption: 'Phase 4' },
+      { to: '/recoltes', label: 'Récoltes', caption: 'Phase 4' },
+      { to: '/arrosages', label: 'Arrosages', caption: 'Phase 4' },
+      { to: '/amendements', label: 'Amendements', caption: 'Phase 4' },
+      { to: '/traitements', label: 'Traitements', caption: 'Phase 4' },
       { to: '/validation', label: 'Validation', caption: 'Phase 6' },
       { to: '/historique', label: 'Historique', caption: 'Phase 5' },
       {
@@ -80,6 +116,7 @@ const navItems = computed(() => {
 
   return [
     { to: '/plan-culture', label: 'Plan de culture', caption: 'Phase 4' },
+    { to: '/arrosages', label: 'Arrosages', caption: 'Phase 4' },
     { to: '/observations', label: 'Mes observations', caption: 'Phase 5' },
   ];
 });

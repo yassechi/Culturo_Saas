@@ -126,17 +126,16 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(USER_KEY);
   }
 
+  let _fetchingUser: Promise<AuthUser> | null = null;
   async function fetchCurrentUser() {
-    const response = await usersApi.getCurrentUser();
-    const nextUser = normalizeUser(
-      response.data,
-      user.value ?? undefined,
-    );
-
-    user.value = nextUser;
-    localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
-
-    return nextUser;
+    if (_fetchingUser) return _fetchingUser;
+    _fetchingUser = usersApi.getCurrentUser().then((response) => {
+      const nextUser = normalizeUser(response.data, user.value ?? undefined);
+      user.value = nextUser;
+      localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+      return nextUser;
+    }).finally(() => { _fetchingUser = null; });
+    return _fetchingUser;
   }
 
   return {

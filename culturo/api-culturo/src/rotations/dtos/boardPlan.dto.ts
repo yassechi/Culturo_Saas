@@ -33,12 +33,13 @@ export class BoardPlanDto {
   @IsString()
   vegetableName: string;
 
-  // @ApiProperty({
-  //   description: "Variété du légume (ex: 'Marmande').",
-  //   example: 'Marmande',
-  // })
-  // @IsString()
-  // varietyName: string | null;
+  @ApiProperty({
+    description: "Variété du légume (ex: 'Marmande').",
+    example: 'Marmande',
+    nullable: true,
+  })
+  @IsString()
+  varietyName: string | null;
 
   @ApiProperty({
     description: 'Date de début de la culture/plantation.',
@@ -69,7 +70,7 @@ export class BoardPlanDto {
     this.boardName = boardName;
     this.boardId = boardId;
     this.vegetableName = vegetableName;
-    // this.varietyName = varietyName;
+    this.varietyName = varietyName;
     this.startDate = startDate;
     this.endDate = endDate;
   }

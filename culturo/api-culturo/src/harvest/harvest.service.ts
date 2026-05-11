@@ -25,7 +25,19 @@ export class HarvestService {
      * @returns Liste des Harvests.
      */
     async findAll(): Promise<Harvest[]> {
-        return this.harvestRepository.find({ relations: ['user_', 'section'] });
+        return this.harvestRepository.find({
+            relations: [
+                'user_',
+                'section',
+                'section.vegetable',
+                'section.variety',
+                'section.sectionPlan',
+                'section.sectionPlan.board',
+                'section.sectionPlan.board.sole',
+                'section.sectionPlan.board.sole.exploitation',
+            ],
+            order: { harvest_date: 'DESC' },
+        });
     }
 
     /**

@@ -1,4 +1,3 @@
-// src/entities/amended.entity.ts
 import { Board } from 'src/entities/board.entity';
 import {
   Column,
@@ -17,17 +16,20 @@ export class Amended {
   @Column({ type: 'date' })
   amendment_date: Date;
 
-  @Column()
-  title: string;
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  quantity: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  quantity_unit: string | null;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
-  @ManyToOne(() => Board, (board) => board.amendeds, { eager: true, nullable: true }) // Ajout de nullable: true
+  @ManyToOne(() => Board, (board) => board.amendeds, { nullable: true })
   @JoinColumn({ name: 'id_board' })
-  board: Board | null; // Changement ici
+  board: Board | null;
 
-  @ManyToOne(() => Amendement, (amendement) => amendement.amendeds, { nullable: true }) // Ajout de nullable: true
+  @ManyToOne(() => Amendement, (amendement) => amendement.amendeds, { nullable: true })
   @JoinColumn({ name: 'amendement_id' })
-  amendement: Amendement | null; // Changement ici
+  amendement: Amendement | null;
 }

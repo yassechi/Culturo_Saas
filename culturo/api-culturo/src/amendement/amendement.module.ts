@@ -1,18 +1,18 @@
-// src/amendement/amendement.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AmendedController } from './amendement.controller';
+import { AmendedController, CatalogueController } from './amendement.controller';
 import { AmendedService } from './amendement.service';
 import { Amended } from '../entities/amended.entity';
-import { Board } from '../entities/board.entity'; // Ajoutez l'entité Board
+import { Amendement } from '../entities/amendement.entity';
+import { Board } from '../entities/board.entity';
 import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Amended, Board]), // Ajoutez Board ici
+    TypeOrmModule.forFeature([Amended, Amendement, Board]),
     UsersModule,
   ],
-  controllers: [AmendedController],
+  controllers: [CatalogueController, AmendedController],
   providers: [AmendedService],
   exports: [AmendedService],
 })

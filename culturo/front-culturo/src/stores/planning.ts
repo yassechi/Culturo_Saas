@@ -19,14 +19,34 @@ import type {
 
 const SECTIONS_PER_BOARD_DEFAULT = 3;
 
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dateIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function makeDefaultForm(
   year = new Date().getFullYear(),
   defaults?: { startDate?: string; endDate?: string; vegetableId?: number },
 ): AssignmentForm {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const defaultStart = year === currentYear ? todayIso() : `${year}-01-01`;
+
+  // endDate = startDate + 90 jours (plafond : 31 décembre de l'année)
+  const startRef = defaults?.startDate ? new Date(defaults.startDate) : today;
+  const endCandidate = new Date(startRef);
+  endCandidate.setDate(endCandidate.getDate() + 90);
+  const yearCap = new Date(year, 11, 31);
+  const defaultEnd = dateIso(endCandidate > yearCap ? yearCap : endCandidate);
+
   return {
     vegetableId: defaults?.vegetableId ?? null,
-    startDate: defaults?.startDate ?? `${year}-01-01`,
-    endDate: defaults?.endDate ?? `${year}-12-31`,
+    startDate: defaults?.startDate ?? defaultStart,
+    endDate: defaults?.endDate ?? defaultEnd,
     quantityPlanted: 0,
     unity: 'unité',
     varietyIdentifier: '',
@@ -115,11 +135,14 @@ export const usePlanningStore = defineStore('planning', () => {
 
     const today = new Date();
     const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+    const isCurrentYear = selectedYear.value === today.getFullYear();
 
     for (const entry of culturePlan.value) {
       const endDate = new Date(entry.endDate);
       const endUtc = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate()));
-      if (endUtc < todayUtc) continue;
+      // Pour l'année courante : une culture terminée libère la section pour re-plantation.
+      // Pour les années passées : on affiche toutes les cultures pour conserver l'historique visuel.
+      if (isCurrentYear && endUtc < todayUtc) continue;
       map.set(`${entry.boardId}-${entry.sectionNumber}`, {
         sectionNumber: entry.sectionNumber,
         status: 'occupied',

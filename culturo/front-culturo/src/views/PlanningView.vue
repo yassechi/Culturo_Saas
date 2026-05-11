@@ -94,7 +94,7 @@ const auth = useAuthStore();
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 const planningYear = ref(store.selectedYear);
-const visibleWindowStartMonth = ref(1);
+const visibleWindowStartMonth = ref(initialWindowStartMonth(store.selectedYear));
 
 function initialWindowStartMonth(year: number) {
   return year === currentYear ? Math.min(currentMonth, 10) : 1;
@@ -116,8 +116,8 @@ const visibleWindowLabel = computed(() =>
 
 const selectedBoardCount = computed(() => store.boardsForSelectedSole.length);
 
-const canMoveBackward = computed(() => visibleWindowStartMonth.value > 1);
-const canMoveForward = computed(() => visibleWindowStartMonth.value < 10);
+const canMoveBackward = computed(() => true);
+const canMoveForward = computed(() => true);
 
 function getDefaultWindowStartMonth(year: number) {
   if (store.culturePlan.length === 0) {
@@ -145,9 +145,17 @@ function getDefaultWindowStartMonth(year: number) {
   return bestStartMonth;
 }
 
-function shiftWindow(delta: number) {
+async function shiftWindow(delta: number) {
   const nextValue = visibleWindowStartMonth.value + delta;
-  visibleWindowStartMonth.value = Math.min(10, Math.max(1, nextValue));
+  if (nextValue > 10) {
+    await onYearChange(planningYear.value + 1);
+    visibleWindowStartMonth.value = 1;
+  } else if (nextValue < 1) {
+    await onYearChange(planningYear.value - 1);
+    visibleWindowStartMonth.value = 10;
+  } else {
+    visibleWindowStartMonth.value = nextValue;
+  }
 }
 
 async function onYearChange(value: number) {
