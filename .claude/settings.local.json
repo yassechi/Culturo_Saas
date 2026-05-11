@@ -12,7 +12,8 @@
       "Bash(npm install *)",
       "Bash(docker exec *)",
       "Bash(xargs grep *)",
-      "Bash(docker restart *)"
+      "Bash(docker restart *)",
+      "Bash(npx tsc *)"
     ]
   }
 }
