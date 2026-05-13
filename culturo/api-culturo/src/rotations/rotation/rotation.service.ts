@@ -13,6 +13,10 @@ import { Repository } from 'typeorm';
 import { PlantableVegetableDto } from '../dtos/plantable.vegetable.dro';
 import { Board } from 'src/entities/board.entity';
 import { Variety } from 'src/entities/variety.entity';
+import { FamilyIncompatibility } from 'src/entities/family_incompatibility.entity';
+import { Watering } from 'src/entities/watering.entity';
+import { Harvest } from 'src/entities/harvest.entity';
+import { Observation } from 'src/entities/observation.entity';
 
 type PlantingSuccess = {
   status: 'OK';
@@ -38,9 +42,12 @@ interface RawCulturePlanResult {
   section_id_section: number;
   section_section_number: number;
   section_section_active: boolean;
+  section_quantity_planted: number;
   vegetable_id_vegetable: number;
   vegetable_vegetable_name: string;
   variety_variety_name: string | null;
+  family_family_name: string | null;
+  family_importance_importance_name: string | null;
   section_start_date: Date;
   section_end_date: Date;
 }
@@ -124,6 +131,17 @@ export class RotationService {
     private boardRepository: Repository<Board>,
     @InjectRepository(Variety)
     private varietyRepository: Repository<Variety>,
+    @InjectRepository(FamilyIncompatibility)
+    private incompatibilityRepository: Repository<FamilyIncompatibility>,
+
+    @InjectRepository(Watering)
+    private wateringRepository: Repository<Watering>,
+
+    @InjectRepository(Harvest)
+    private harvestRepository: Repository<Harvest>,
+
+    @InjectRepository(Observation)
+    private observationRepository: Repository<Observation>,
   ) {}
 
   /**
@@ -154,6 +172,8 @@ export class RotationService {
     const results: RawCulturePlanResult[] = await this.sectionRepository
       .createQueryBuilder('section')
       .leftJoin('section.vegetable', 'vegetable')
+      .leftJoin('vegetable.family', 'family')
+      .leftJoin('family.family_importance', 'family_importance')
       .leftJoin('section.variety', 'variety')
       .leftJoin('section.sectionPlan', 'sectionPlan')
       .leftJoin('sectionPlan.board', 'board')
@@ -167,9 +187,12 @@ export class RotationService {
         'section.id_section',
         'section.section_number',
         'section.section_active',
+        'section.quantity_planted',
         'vegetable.id_vegetable',
         'vegetable.vegetable_name',
         'variety.variety_name',
+        'family.family_name',
+        'family_importance.importance_name',
         'section.start_date',
         'section.end_date',
       ])
@@ -186,6 +209,9 @@ export class RotationService {
       vegetableId: r.vegetable_id_vegetable,
       vegetableName: r.vegetable_vegetable_name,
       varietyName: r.variety_variety_name ?? null,
+      familyName: r.family_family_name ?? null,
+      familyType: r.family_importance_importance_name ?? null,
+      quantityPlanted: r.section_quantity_planted ?? 0,
       startDate: r.section_start_date,
       endDate: r.section_end_date,
     }));
@@ -314,7 +340,7 @@ export class RotationService {
       }
     }
 
-    // RÉSULTATS
+    // RÉSULTATS — Règles bloquantes en premier
     if (alreadyPlantedIn5Years && !bypass) {
       return {
         status: 'WARNING',
@@ -332,7 +358,138 @@ export class RotationService {
       };
     }
 
-    return seasonalityWarning ?? { status: 'OK' };
+    // RÈGLE 3 — Associations déconseillées (non bloquant)
+    const associationWarning = await this.checkAssociationRule(boardId, family.id_family, refDate);
+    if (associationWarning) return associationWarning;
+
+    // RÈGLE 4 — Saisonnalité (déjà calculée)
+    if (seasonalityWarning) return seasonalityWarning;
+
+    // RÈGLE 5 — Engrais vert recommandé après culture à fort besoin en azote (non bloquant)
+    const nitrogenWarning = await this.checkNitrogenRule(boardId, refDate);
+    if (nitrogenWarning) return nitrogenWarning;
+
+    // RÈGLE 6 — Jachère recommandée après culture intensive (non bloquant)
+    const fallowWarning = await this.checkFallowRule(boardId, refDate);
+    if (fallowWarning) return fallowWarning;
+
+    return { status: 'OK' };
+  }
+
+  private async checkAssociationRule(
+    boardId: number,
+    targetFamilyId: number,
+    refDate: Date,
+  ): Promise<{ status: 'WARNING'; reason: string; neededBypass: boolean } | null> {
+    const incompatibilities = await this.incompatibilityRepository.find({
+      where: [
+        { family_a_id: targetFamilyId },
+        { family_b_id: targetFamilyId },
+      ],
+    });
+
+    if (incompatibilities.length === 0) return null;
+
+    const incompatibleFamilyIds = new Set(
+      incompatibilities.flatMap((i) => [i.family_a_id, i.family_b_id]).filter((id) => id !== targetFamilyId),
+    );
+
+    const refDateUtc = new Date(Date.UTC(refDate.getFullYear(), refDate.getMonth(), refDate.getDate()));
+
+    const activeSections = await this.sectionRepository
+      .createQueryBuilder('section')
+      .leftJoinAndSelect('section.vegetable', 'vegetable')
+      .leftJoinAndSelect('vegetable.family', 'family')
+      .innerJoin('section.sectionPlan', 'sp')
+      .innerJoin('sp.board', 'board')
+      .where('board.id_board = :boardId', { boardId })
+      .andWhere('section.end_date > :refDate', { refDate: refDateUtc })
+      .getMany();
+
+    for (const section of activeSections) {
+      const activeFamilyId = section.vegetable?.family?.id_family;
+      if (activeFamilyId && incompatibleFamilyIds.has(activeFamilyId)) {
+        const incompat = incompatibilities.find(
+          (i) =>
+            (i.family_a_id === targetFamilyId && i.family_b_id === activeFamilyId) ||
+            (i.family_b_id === targetFamilyId && i.family_a_id === activeFamilyId),
+        );
+        const familyName = section.vegetable?.family?.family_name ?? `famille ID ${activeFamilyId}`;
+        const detail = incompat?.reason ? ` (${incompat.reason})` : '';
+        return {
+          status: 'WARNING',
+          reason: `RÈGLE 3: Association déconseillée avec ${familyName} déjà présente sur cette planche${detail}.`,
+          neededBypass: false,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private async checkNitrogenRule(
+    boardId: number,
+    refDate: Date,
+  ): Promise<{ status: 'WARNING'; reason: string; neededBypass: boolean } | null> {
+    const lastEndedSection = await this.sectionRepository
+      .createQueryBuilder('section')
+      .leftJoinAndSelect('section.vegetable', 'vegetable')
+      .innerJoin('section.sectionPlan', 'sp')
+      .innerJoin('sp.board', 'board')
+      .where('board.id_board = :boardId', { boardId })
+      .andWhere('section.end_date <= :refDate', { refDate })
+      .orderBy('section.end_date', 'DESC')
+      .getOne();
+
+    if (lastEndedSection?.vegetable?.nitrogen_need === 'fort') {
+      const vegName = lastEndedSection.vegetable.vegetable_name;
+      return {
+        status: 'WARNING',
+        reason: `RÈGLE 5: La culture précédente (${vegName}) avait un fort besoin en azote. Un engrais vert ou un amendement est recommandé avant de replanter sur cette planche.`,
+        neededBypass: false,
+      };
+    }
+
+    return null;
+  }
+
+  private async checkFallowRule(
+    boardId: number,
+    refDate: Date,
+  ): Promise<{ status: 'WARNING'; reason: string; neededBypass: boolean } | null> {
+    const allSections = await this.sectionRepository
+      .createQueryBuilder('section')
+      .innerJoin('section.sectionPlan', 'sp')
+      .innerJoin('sp.board', 'board')
+      .where('board.id_board = :boardId', { boardId })
+      .select(['section.start_date', 'section.end_date'])
+      .getMany();
+
+    const currentYear = refDate.getFullYear();
+    let consecutiveYears = 0;
+
+    for (let y = currentYear - 1; y >= currentYear - 5; y--) {
+      const yearStart = new Date(y, 0, 1);
+      const yearEnd = new Date(y, 11, 31);
+      const hasActivity = allSections.some(
+        (s) => new Date(s.start_date) <= yearEnd && new Date(s.end_date) >= yearStart,
+      );
+      if (hasActivity) {
+        consecutiveYears++;
+      } else {
+        break;
+      }
+    }
+
+    if (consecutiveYears >= 3) {
+      return {
+        status: 'WARNING',
+        reason: `RÈGLE 6: Cette planche est en culture intensive depuis ${consecutiveYears} années consécutives. Une année de jachère ou d'engrais vert est recommandée pour restaurer la fertilité du sol.`,
+        neededBypass: false,
+      };
+    }
+
+    return null;
   }
 
   /**
@@ -377,98 +534,110 @@ export class RotationService {
         .where('sectionPlan.section_plan_active = :active', { active: true })
         .getMany();
 
-      // Pour chaque SectionPlan, vérifier la disponibilité
+      // Regrouper tous les plans actifs par planche pour avoir une vue complète
+      // (une planche peut avoir plusieurs section_plans actifs issus de différentes années)
+      type BoardAggregate = {
+        boardId: number;
+        boardName: string;
+        numberOfSections: number;
+        sectionPlanId: number;
+        allSections: (typeof allSectionPlans[0]['sections'][0])[];
+      };
+
+      const boardMap = new Map<number, BoardAggregate>();
+      for (const sectionPlan of allSectionPlans) {
+        const boardId = sectionPlan.board.id_board;
+        if (!boardMap.has(boardId)) {
+          boardMap.set(boardId, {
+            boardId,
+            boardName: sectionPlan.board.board_name,
+            numberOfSections: sectionPlan.number_of_section,
+            sectionPlanId: sectionPlan.id_section_plan,
+            allSections: [],
+          });
+        }
+        const agg = boardMap.get(boardId)!;
+        // Prendre le plus grand nombre de sections connu
+        if (sectionPlan.number_of_section > agg.numberOfSections) {
+          agg.numberOfSections = sectionPlan.number_of_section;
+        }
+        // Garder le plan le plus récent comme référence
+        if (sectionPlan.id_section_plan > agg.sectionPlanId) {
+          agg.sectionPlanId = sectionPlan.id_section_plan;
+        }
+        agg.allSections.push(...sectionPlan.sections);
+      }
+
       const plantableLocations: any[] = [];
 
-      for (const sectionPlan of allSectionPlans) {
+      for (const agg of boardMap.values()) {
+        // ── RÈGLE 1 (niveau planche) : pas deux familles primaires différentes
+        //    simultanément sur la même planche pendant la période demandée
         let isBoardAccessible = true;
 
-        for (const section of sectionPlan.sections) {
-          // Ignorer les sections sans légume
-          if (!section.vegetable) {
-            continue;
-          }
+        for (const section of agg.allSections) {
+          if (!section.vegetable?.family) continue;
 
-          // RÈGLE 1 : Cohabitation de familles primaires — chevauchement avec la période demandée
-          if (section.vegetable.family) {
-            const activeFamilyId = section.vegetable.family.id_family;
-            const isActivePrimary =
-              section.vegetable.family.family_importance?.importance_name ===
-              'primaire';
-            const overlaps =
-              new Date(section.end_date) > startDate &&
-              new Date(section.start_date) < endDate;
+          const activeFamilyId = section.vegetable.family.id_family;
+          const isActivePrimary =
+            section.vegetable.family.family_importance?.importance_name === 'primaire';
+          const overlaps =
+            new Date(section.end_date) > startDate &&
+            new Date(section.start_date) < endDate;
 
-            if (isActivePrimary && overlaps && activeFamilyId !== targetFamilyId) {
-              isBoardAccessible = false;
-              break;
-            }
-          }
-
-          // RÈGLE 2 : Rotation 5 ans (si légume cible est primaire)
-          if (isTargetPrimary && section.vegetable.family) {
-            const pastFamilyId = section.vegetable.family.id_family;
-            const isPastPrimary =
-              section.vegetable.family.family_importance?.importance_name ===
-              'primaire';
-
-            if (
-              isPastPrimary &&
-              pastFamilyId === targetFamilyId &&
-              section.end_date >= fiveYearsAgo
-            ) {
-              isBoardAccessible = false;
-              break;
-            }
+          if (isActivePrimary && isTargetPrimary && overlaps && activeFamilyId !== targetFamilyId) {
+            isBoardAccessible = false;
+            break;
           }
         }
 
-        // Si la board n'est pas accessible, passer à la suivante
-        if (!isBoardAccessible) {
-          continue;
-        }
+        if (!isBoardAccessible) continue;
 
-        // Si la board est accessible => vérifier chaque section individuellement
-        for (
-          let sectionNumber = 1;
-          sectionNumber <= sectionPlan.number_of_section;
-          sectionNumber++
-        ) {
-          const sectionsAtLocation = sectionPlan.sections.filter(
+        // ── Vérification par section ───────────────────────────────────────────
+        for (let sectionNumber = 1; sectionNumber <= agg.numberOfSections; sectionNumber++) {
+          const sectionsAtLocation = agg.allSections.filter(
             (s) => s.section_number === sectionNumber,
           );
 
           let isSectionPlantable = true;
 
           for (const section of sectionsAtLocation) {
-            // Ignorer les sections sans légume
-            if (!section.vegetable) {
-              continue;
-            }
+            if (!section.vegetable) continue;
 
-            // Occupation physique stricte (fin exclusive)
-            const isOccupiedDuringPeriod =
-              new Date(section.start_date) < endDate && new Date(section.end_date) > startDate;
+            // Occupation physique : chevauchement avec la période demandée
+            const isOccupied =
+              new Date(section.start_date) < endDate &&
+              new Date(section.end_date) > startDate;
 
-            if (isOccupiedDuringPeriod) {
+            if (isOccupied) {
               isSectionPlantable = false;
               break;
             }
+
+            // RÈGLE 2 (niveau section) : même famille primaire dans les 5 dernières années
+            if (isTargetPrimary && section.vegetable.family) {
+              const pastFamilyId = section.vegetable.family.id_family;
+              const isPastPrimary =
+                section.vegetable.family.family_importance?.importance_name === 'primaire';
+
+              if (isPastPrimary && pastFamilyId === targetFamilyId && section.end_date >= fiveYearsAgo) {
+                isSectionPlantable = false;
+                break;
+              }
+            }
           }
 
-          // Si cette section est plantable, l'ajouter aux résultats
           if (isSectionPlantable) {
+            const sorted = [...sectionsAtLocation].sort(
+              (a, b) => new Date(b.end_date).getTime() - new Date(a.end_date).getTime(),
+            );
             plantableLocations.push({
-              sectionPlanId: sectionPlan.id_section_plan,
-              boardId: sectionPlan.board.id_board,
-              boardName: sectionPlan.board.board_name,
-              sectionNumber: sectionNumber,
-              totalSections: sectionPlan.number_of_section,
-              lastPlantedVegetable:
-                sectionsAtLocation.length > 0
-                  ? sectionsAtLocation[sectionsAtLocation.length - 1].vegetable
-                      ?.vegetable_name
-                  : null,
+              sectionPlanId: agg.sectionPlanId,
+              boardId: agg.boardId,
+              boardName: agg.boardName,
+              sectionNumber,
+              totalSections: agg.numberOfSections,
+              lastPlantedVegetable: sorted[0]?.vegetable?.vegetable_name ?? null,
               neverPlanted: sectionsAtLocation.length === 0,
             });
           }
@@ -555,6 +724,7 @@ export class RotationService {
 
       const activePrimaryFamilies = new Set<number>();
       const recentPrimaryFamilies = new Set<number>();
+      const activeFamilyIds = new Set<number>();
 
       for (const section of allBoardSections) {
         if (!section.vegetable?.family?.family_importance) continue;
@@ -563,19 +733,45 @@ export class RotationService {
         const isPrimary =
           section.vegetable.family.family_importance.importance_name === 'primaire';
 
+        const isActive =
+          new Date(section.end_date) > startDate &&
+          new Date(section.start_date) < endDate;
+
+        if (isActive) {
+          activeFamilyIds.add(familyId);
+        }
+
         if (!isPrimary) continue;
 
-        // Famille active si elle chevauche strictement la nouvelle période
-        if (
-          new Date(section.end_date) > startDate &&
-          new Date(section.start_date) < endDate
-        ) {
+        if (isActive) {
           activePrimaryFamilies.add(familyId);
         }
 
-        // Famille plantée dans les 5 dernières années
         if (new Date(section.end_date) > fiveYearsAgo) {
           recentPrimaryFamilies.add(familyId);
+        }
+      }
+
+      // Charger les incompatibilités pour toutes les familles actives
+      const allIncompatibilities =
+        activeFamilyIds.size > 0
+          ? await this.incompatibilityRepository
+              .createQueryBuilder('incompat')
+              .where('incompat.family_a_id IN (:...ids)', { ids: [...activeFamilyIds] })
+              .orWhere('incompat.family_b_id IN (:...ids)', { ids: [...activeFamilyIds] })
+              .getMany()
+          : [];
+
+      // familyId → raison d'incompatibilité avec les familles actives
+      const incompatibleFamilyReasons = new Map<number, string>();
+      for (const incompat of allIncompatibilities) {
+        const conflictingActiveId = activeFamilyIds.has(incompat.family_a_id)
+          ? incompat.family_a_id
+          : incompat.family_b_id;
+        const targetId =
+          incompat.family_a_id === conflictingActiveId ? incompat.family_b_id : incompat.family_a_id;
+        if (!incompatibleFamilyReasons.has(targetId)) {
+          incompatibleFamilyReasons.set(targetId, incompat.reason ?? 'association déconseillée');
         }
       }
 
@@ -615,14 +811,20 @@ export class RotationService {
         }
 
         if (isPlantable) {
+          const assocReason = incompatibleFamilyReasons.get(familyId) ?? null;
           plantableVegetables.push({
             vegetableId: vegetable.id_vegetable,
             vegetableName: vegetable.vegetable_name,
             familyId: vegetable.family.id_family,
             familyName: vegetable.family.family_name,
             importance: vegetable.family.family_importance.importance_name,
-            lastPlantedInSection: lastSectionAtLocation?.vegetable?.vegetable_name ?? null,
+            lastPlantedInSection: lastSectionAtLocation?.start_date
+              ? new Date(lastSectionAtLocation.start_date).toISOString()
+              : null,
+            lastQuantityPlanted: lastSectionAtLocation?.quantity_planted ?? null,
             neverPlantedInSection: sectionsAtLocation.filter((s) => s.vegetable).length === 0,
+            associationWarning: assocReason !== null,
+            associationWarningReason: assocReason,
           });
         }
       }
@@ -662,6 +864,10 @@ export class RotationService {
 
     // CAS 1: Le plan existe.
     if (existingPlan) {
+      if (numberOfSections !== existingPlan.number_of_section && numberOfSections > 0) {
+        existingPlan.number_of_section = numberOfSections;
+        await this.sectionPlanRepository.save(existingPlan);
+      }
       return { sectionPlan: existingPlan, status: 'FOUND' };
     }
 
@@ -909,5 +1115,18 @@ export class RotationService {
         `Erreur addVegetableToBoard: ${errorMessage}`,
       );
     }
+  }
+
+  async cancelSection(sectionId: number): Promise<void> {
+    const section = await this.sectionRepository.findOne({
+      where: { id_section: sectionId },
+    });
+    if (!section) throw new NotFoundException('Section introuvable');
+
+    await this.wateringRepository.delete({ section: { id_section: sectionId } });
+    await this.harvestRepository.delete({ section: { id_section: sectionId } });
+    await this.observationRepository.delete({ section: { id_section: sectionId } });
+
+    await this.sectionRepository.remove(section);
   }
 }

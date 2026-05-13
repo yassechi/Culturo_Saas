@@ -24,6 +24,7 @@ export enum Permission {
   PLANIFIER_CULTURE = 'planifier_culture',
   BYPASS_ROTATION = 'bypass_rotation',
   CONSULTER_PLAN = 'consulter_plan',
+  DELETE_SECTION = 'delete_section',
 
   // Observations terrain
   SAISIR_OBSERVATION = 'saisir_observation',

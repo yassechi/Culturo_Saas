@@ -74,65 +74,16 @@
         </p>
 
         <div class="param-group">
-          <h3 class="param-group-title">Rotations</h3>
-          <div class="param-row">
-            <div class="param-info">
-              <span class="param-label">Seuil d'alerte (années consécutives)</span>
-              <span class="param-desc">
-                Nombre d'années consécutives de même légume déclenchant une alerte critique.
-              </span>
-            </div>
-            <input
-              v-model.number="params.rotationCriticalYears"
-              type="number"
-              class="param-input"
-              min="1"
-              max="10"
-            />
-          </div>
-          <div class="param-row">
-            <div class="param-info">
-              <span class="param-label">Seuil d'avertissement (années non-consécutives)</span>
-              <span class="param-desc">
-                Nombre de répétitions sur la période complète pour déclencher un avertissement.
-              </span>
-            </div>
-            <input
-              v-model.number="params.rotationWarningOccurrences"
-              type="number"
-              class="param-input"
-              min="2"
-              max="10"
-            />
-          </div>
-        </div>
-
-        <div class="param-group">
           <h3 class="param-group-title">Planification</h3>
           <div class="param-row">
             <div class="param-info">
               <span class="param-label">Sections par planche (défaut)</span>
               <span class="param-desc">
-                Nombre de sections affichées par défaut dans la vue Gantt du planning.
+                Nombre de sections créées par défaut lors de la première planification d'une planche.
               </span>
             </div>
             <input
-              v-model.number="params.defaultSectionsPerBoard"
-              type="number"
-              class="param-input"
-              min="1"
-              max="12"
-            />
-          </div>
-          <div class="param-row">
-            <div class="param-info">
-              <span class="param-label">Fenêtre Gantt (mois visibles)</span>
-              <span class="param-desc">
-                Nombre de mois affichés simultanément dans le calendrier de planification.
-              </span>
-            </div>
-            <input
-              v-model.number="params.planningWindowMonths"
+              v-model.number="configStore.config.defaultSectionsPerBoard"
               type="number"
               class="param-input"
               min="1"
@@ -143,11 +94,11 @@
             <div class="param-info">
               <span class="param-label">Déplacement fenêtre Gantt (mois)</span>
               <span class="param-desc">
-                Nombre de mois parcourus à chaque clic sur les boutons de navigation.
+                Nombre de mois parcourus à chaque clic sur les boutons de navigation du calendrier.
               </span>
             </div>
             <input
-              v-model.number="params.planningWindowStep"
+              v-model.number="configStore.config.planningWindowStep"
               type="number"
               class="param-input"
               min="1"
@@ -162,11 +113,11 @@
             <div class="param-info">
               <span class="param-label">Années chargées par défaut</span>
               <span class="param-desc">
-                Nombre d'années analysées à l'ouverture de la vue Historique (années précédentes + année courante).
+                Nombre d'années affichées à l'ouverture de la vue Historique (années précédentes + année courante).
               </span>
             </div>
             <input
-              v-model.number="params.historyDefaultYears"
+              v-model.number="configStore.config.historyDefaultYears"
               type="number"
               class="param-input"
               min="1"
@@ -176,8 +127,15 @@
         </div>
 
         <div class="param-actions">
-          <button class="btn-secondary" @click="resetParams">Réinitialiser</button>
-          <button class="btn-primary" @click="saveParams">Enregistrer</button>
+          <template v-if="resetConfirming">
+            <span class="reset-confirm-text">Remettre tous les paramètres aux valeurs par défaut ?</span>
+            <button class="btn-secondary" @click="resetConfirming = false">Annuler</button>
+            <button class="btn-danger-sm" @click="doReset">Confirmer</button>
+          </template>
+          <template v-else>
+            <button class="btn-secondary" @click="resetConfirming = true">Réinitialiser</button>
+            <button class="btn-primary" @click="saveParams">Enregistrer</button>
+          </template>
         </div>
       </div>
     </section>
@@ -279,7 +237,12 @@
         </div>
 
         <div class="session-actions">
-          <button class="btn-danger" @click="clearLocalStorage">
+          <template v-if="clearConfirming">
+            <span class="reset-confirm-text">Supprimer le cache et se déconnecter ?</span>
+            <button class="btn-secondary" @click="clearConfirming = false">Annuler</button>
+            <button class="btn-danger" @click="doClearLocalStorage">Confirmer</button>
+          </template>
+          <button v-else class="btn-danger" @click="clearConfirming = true">
             Vider le cache local
           </button>
         </div>
@@ -291,9 +254,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useAuthStore } from '@/stores/auth';
+import { useConfigStore } from '@/stores/config';
 import apiClient from '@/api/client';
 
 const auth = useAuthStore();
+const configStore = useConfigStore();
 
 // ── Section toggles ──────────────────────────────────────────────────────────
 
@@ -344,38 +309,18 @@ async function checkApiStatus() {
 
 // ── Business params ──────────────────────────────────────────────────────────
 
-const CONFIG_KEY = 'culturo_config';
-
-const DEFAULT_PARAMS = {
-  rotationCriticalYears: 1,
-  rotationWarningOccurrences: 2,
-  defaultSectionsPerBoard: 3,
-  planningWindowMonths: 3,
-  planningWindowStep: 3,
-  historyDefaultYears: 3,
-};
-
-function loadParams() {
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (raw) return { ...DEFAULT_PARAMS, ...JSON.parse(raw) };
-  } catch {}
-  return { ...DEFAULT_PARAMS };
-}
-
-const params = reactive(loadParams());
 const saved = ref(false);
+const resetConfirming = ref(false);
 
 function saveParams() {
-  localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...params }));
+  configStore.save();
   saved.value = true;
   setTimeout(() => (saved.value = false), 2500);
 }
 
-function resetParams() {
-  if (!confirm('Réinitialiser tous les paramètres aux valeurs par défaut ?')) return;
-  Object.assign(params, DEFAULT_PARAMS);
-  localStorage.removeItem(CONFIG_KEY);
+function doReset() {
+  configStore.reset();
+  resetConfirming.value = false;
   saved.value = true;
   setTimeout(() => (saved.value = false), 2500);
 }
@@ -417,6 +362,7 @@ const permissionGroups = [
       { key: 'CONSULTER_PLAN', label: 'Consulter le plan de culture', admin: true, formateur: true, stagiaire: true },
       { key: 'PLANIFIER_CULTURE', label: 'Planifier une culture', admin: true, formateur: true, stagiaire: false },
       { key: 'BYPASS_ROTATION', label: 'Forcer une rotation non recommandée', admin: true, formateur: true, stagiaire: false },
+      { key: 'DELETE_SECTION', label: 'Annuler une culture (supprimer section)', admin: true, formateur: true, stagiaire: false },
       { key: 'MODIFIER_SUPPRIMER_RECOLTE', label: 'Modifier / supprimer une récolte', admin: true, formateur: true, stagiaire: false },
     ],
   },
@@ -446,8 +392,9 @@ const localStorageKeys = computed(() => {
   return count;
 });
 
-function clearLocalStorage() {
-  if (!confirm('Supprimer toutes les données Culturo du cache local ? Vous serez déconnecté.')) return;
+const clearConfirming = ref(false);
+
+function doClearLocalStorage() {
   const toRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -716,9 +663,32 @@ h1 {
 
 .param-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
+
+.reset-confirm-text {
+  font-size: 0.84rem;
+  color: rgba(39, 65, 53, 0.7);
+  flex: 1;
+  min-width: 200px;
+}
+
+.btn-danger-sm {
+  padding: 0.65rem 1.2rem;
+  border-radius: 12px;
+  border: 1.5px solid rgba(200, 60, 60, 0.35);
+  background: rgba(200, 60, 60, 0.08);
+  color: #b94040;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 160ms;
+}
+
+.btn-danger-sm:hover { background: rgba(200, 60, 60, 0.16); }
 
 /* ── Permissions table ────────────────────────────────────────────────────── */
 .table-wrap {
@@ -802,7 +772,10 @@ h1 {
 /* ── Session actions ──────────────────────────────────────────────────────── */
 .session-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .btn-danger {

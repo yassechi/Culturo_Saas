@@ -30,11 +30,13 @@ services:
       JWT_SECRET: dev-secret-change-in-production
       PORT: 3000
       NODE_ENV: development
-      MAIL_HOST: localhost
-      MAIL_PORT: 1025
-      MAIL_USER: dev
-      MAIL_PASSWORD: dev
-      MAIL_FROM: Culturo <noreply@culturo.local>
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_SECURE: 'false'
+      MAIL_USER: culturotech@gmail.com
+      MAIL_PASSWORD: vbbknpefahrdbytp
+      MAIL_FROM: Culturo <culturotech@gmail.com>
+      FRONTEND_URL: http://localhost:5173
     ports:
       - '3000:3000'
     depends_on:

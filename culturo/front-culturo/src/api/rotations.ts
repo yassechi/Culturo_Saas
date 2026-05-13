@@ -59,6 +59,10 @@ export const rotationsApi = {
     return apiClient.post('/rotations/add-vegetable', dto);
   },
 
+  cancelSection(sectionId: number) {
+    return apiClient.delete(`/rotations/section/${sectionId}`);
+  },
+
   canPlantVegetable(
     boardId: number,
     vegetableId: number,

@@ -53,7 +53,45 @@
         </section>
 
         <section class="vsearch-section">
-          <h4>2. Période de plantation</h4>
+          <h4>2. Périmètre de recherche</h4>
+          <div class="date-grid">
+            <div class="form-field">
+              <label for="vsearch-exp">Exploitation</label>
+              <select
+                id="vsearch-exp"
+                v-model.number="selectedExploitationId"
+                class="vsearch-select"
+                @change="selectedSoleId = null"
+              >
+                <option :value="null">Toutes</option>
+                <option
+                  v-for="exp in store.uniqueExploitations"
+                  :key="exp.id_exploitation"
+                  :value="exp.id_exploitation"
+                >{{ exp.exploitation_name }}</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="vsearch-sole">Sole</label>
+              <select
+                id="vsearch-sole"
+                v-model.number="selectedSoleId"
+                class="vsearch-select"
+                :disabled="solesForExploitation.length === 0"
+              >
+                <option :value="null">Toutes</option>
+                <option
+                  v-for="s in solesForExploitation"
+                  :key="s.id_sole"
+                  :value="s.id_sole"
+                >{{ s.sole_name }}</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="vsearch-section">
+          <h4>3. Période de plantation</h4>
           <div class="date-grid">
             <div class="form-field">
               <label for="vsearch-start">Début</label>
@@ -77,7 +115,7 @@
 
         <!-- Results -->
         <section v-if="hasSearched" class="vsearch-section results-section">
-          <h4>3. Sections disponibles</h4>
+          <h4>4. Sections disponibles</h4>
 
           <div v-if="store.plantableSectionsLoading" class="state-info">Recherche en cours…</div>
 
@@ -85,18 +123,21 @@
             {{ store.plantableSectionsError }}
           </div>
 
-          <div v-else-if="store.plantableSections.length === 0" class="state-empty">
+          <div v-else-if="filteredSectionsByBoard.length === 0" class="state-empty">
             Aucune section disponible pour ce légume sur cette période.<br>
             <small>Vérifiez les règles de rotation (5 ans) ou choisissez d'autres dates.</small>
           </div>
 
           <div v-else class="results-list">
             <div
-              v-for="boardGroup in store.plantableSectionsByBoard"
+              v-for="boardGroup in filteredSectionsByBoard"
               :key="boardGroup.boardName"
               class="result-board"
             >
-              <div class="result-board-name">{{ boardGroup.boardName }}</div>
+              <div class="result-board-name">
+                {{ boardGroup.boardName }}
+                <span v-if="boardGroup.soleName" class="result-sole-name">— {{ boardGroup.soleName }}</span>
+              </div>
               <div class="result-sections">
                 <div
                   v-for="section in boardGroup.sections"
@@ -111,13 +152,6 @@
                       Dernier : {{ section.lastPlantedVegetable }}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    class="plan-here-btn"
-                    @click="planHere(section)"
-                  >
-                    Planifier ici →
-                  </button>
                 </div>
               </div>
             </div>
@@ -144,8 +178,55 @@ const searchStartDate = ref(`${store.selectedYear}-01-01`);
 const searchEndDate = ref(`${store.selectedYear}-12-31`);
 const hasSearched = ref(false);
 
+// ── Filtres exploitation / sole ───────────────────────────────────────────────
+const selectedExploitationId = ref<number | null>(null);
+const selectedSoleId = ref<number | null>(null);
+
+const solesForExploitation = computed(() => {
+  if (selectedExploitationId.value === null) return store.soles;
+  return store.soles.filter(
+    (s) => s.exploitation?.id_exploitation === selectedExploitationId.value,
+  );
+});
+
+// Lookup: boardId → { soleId, exploitationId }
+const boardToSole = computed(() => {
+  const map = new Map<number, { soleId: number; exploitationId: number; soleName: string }>();
+  for (const sole of store.soles) {
+    for (const board of sole.boards) {
+      map.set(board.id_board, {
+        soleId: sole.id_sole,
+        exploitationId: sole.exploitation?.id_exploitation ?? -1,
+        soleName: sole.sole_name,
+      });
+    }
+  }
+  return map;
+});
+
+const filteredSectionsByBoard = computed(() => {
+  const sections = store.plantableSections.filter((s) => {
+    const meta = boardToSole.value.get(s.boardId);
+    if (!meta) return true; // inconnu → inclure par défaut
+    if (selectedSoleId.value !== null && meta.soleId !== selectedSoleId.value) return false;
+    if (selectedExploitationId.value !== null && meta.exploitationId !== selectedExploitationId.value) return false;
+    return true;
+  });
+
+  const map = new Map<number, { boardName: string; soleName: string; sections: PlantableSection[] }>();
+  for (const s of sections) {
+    if (!map.has(s.boardId)) {
+      const meta = boardToSole.value.get(s.boardId);
+      map.set(s.boardId, { boardName: s.boardName, soleName: meta?.soleName ?? '', sections: [] });
+    }
+    map.get(s.boardId)!.sections.push(s);
+  }
+  return [...map.values()];
+});
+
 onMounted(() => {
   if (botanical.families.length === 0) botanical.loadAll();
+  if (store.soles.length === 0) store.loadSoles();
 });
 
 const groupedVegetables = computed(() => {
@@ -380,13 +461,30 @@ function planHere(section: PlantableSection) {
   color: rgba(39, 65, 53, 0.65);
 }
 
-.form-field input {
+.form-field input,
+.vsearch-select {
   padding: 0.75rem 0.9rem;
   border: 1px solid rgba(39, 65, 53, 0.14);
   border-radius: 12px;
   font-size: 0.9rem;
   background: rgba(255, 255, 255, 0.94);
   color: var(--text-primary);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.vsearch-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23274135' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.9rem center;
+  padding-right: 2.2rem;
+  cursor: pointer;
+}
+
+.vsearch-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .search-btn {
@@ -422,6 +520,18 @@ function planHere(section: PlantableSection) {
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: rgba(39, 65, 53, 0.55);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.result-sole-name {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.76rem;
+  color: rgba(39, 65, 53, 0.4);
 }
 
 .result-sections { display: flex; flex-direction: column; gap: 0.3rem; }

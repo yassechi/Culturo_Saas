@@ -1,9 +1,22 @@
 <template>
   <div class="app-shell" :class="{ 'sidebar-collapsed': !sidebarOpen }">
-    <aside class="sidebar">
+    <!-- Fond semi-transparent mobile (tiroir ouvert) -->
+    <div v-if="sidebarOpen" class="sidebar-backdrop" @click="toggleSidebar" />
+
+    <aside class="sidebar" :class="{ 'sidebar-is-open': sidebarOpen }">
+      <!-- Bouton fermer — visible uniquement sur mobile, dans la sidebar -->
+      <button class="sidebar-close-btn" type="button" aria-label="Fermer la navigation" @click="toggleSidebar">
+        <span class="toggle-bar" />
+        <span class="toggle-bar" />
+        <span class="toggle-bar" />
+      </button>
+
       <div class="brand-block">
         <span class="eyebrow">Plateforme de planification</span>
-        <h1>Culturo</h1>
+        <div class="brand-title">
+          <h1>Culturo</h1>
+          <img src="/Logo.svg" alt="Logo Culturo" class="brand-logo" />
+        </div>
         <span class="role-pill">{{ auth.user?.role ?? 'invite' }}</span>
       </div>
 
@@ -11,10 +24,7 @@
         <RouterLink class="nav-link" to="/dashboard">Accueil</RouterLink>
 
         <template v-for="item in navItems" :key="item.to">
-          <RouterLink class="nav-link" :to="item.to">
-            <span>{{ item.label }}</span>
-            <small>{{ item.caption }}</small>
-          </RouterLink>
+          <RouterLink class="nav-link" :to="item.to">{{ item.label }}</RouterLink>
         </template>
       </nav>
 
@@ -32,6 +42,7 @@
         <div class="topbar-left">
           <button
             class="sidebar-toggle"
+            :class="{ 'sidebar-toggle-hidden-mobile': sidebarOpen }"
             type="button"
             :aria-label="sidebarOpen ? 'Masquer la navigation' : 'Afficher la navigation'"
             :title="sidebarOpen ? 'Masquer la navigation' : 'Afficher la navigation'"
@@ -46,9 +57,12 @@
             <h2>{{ route.meta.title ?? 'Tableau de bord' }}</h2>
           </div>
         </div>
-        <button class="ghost-button" type="button" @click="handleRefresh">
-          Rafraîchir le profil
-        </button>
+        <div class="topbar-right">
+          <Transition name="fade">
+            <span v-if="isNavigating" class="nav-spinner" aria-label="Chargement en cours" />
+          </Transition>
+          <NotificationBell />
+        </div>
       </header>
 
       <slot />
@@ -57,9 +71,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import NotificationBell from '@/components/NotificationBell.vue';
 
 const route = useRoute();
 
@@ -84,54 +99,114 @@ function toggleSidebar() {
 const navItems = computed(() => {
   if (auth.isAdmin) {
     return [
-      { to: '/admin/utilisateurs', label: 'Utilisateurs', caption: 'Phase 6' },
-      { to: '/admin/botanique', label: 'Referentiel botanique', caption: 'Phase 2' },
-      { to: '/admin/sol-planches', label: 'Sol & planches', caption: 'Phase 3' },
-      { to: '/plan', label: 'Planification', caption: 'Phase 4' },
-      { to: '/recoltes', label: 'Récoltes', caption: 'Phase 4' },
-      { to: '/arrosages', label: 'Arrosages', caption: 'Phase 4' },
-      { to: '/amendements', label: 'Amendements', caption: 'Phase 4' },
-      { to: '/traitements', label: 'Traitements', caption: 'Phase 4' },
-      { to: '/historique', label: 'Historique', caption: 'Phase 5' },
-      { to: '/admin/configuration', label: 'Configuration', caption: 'Fondation' },
+      { to: '/admin/utilisateurs', label: 'Utilisateurs' },
+      { to: '/admin/botanique', label: 'Référentiel botanique' },
+      { to: '/admin/sol-planches', label: 'Sol & planches' },
+      { to: '/plan', label: 'Planification' },
+      { to: '/recoltes', label: 'Récoltes' },
+      { to: '/arrosages', label: 'Arrosages' },
+      { to: '/amendements', label: 'Fertilisations' },
+      { to: '/traitements', label: 'Traitements' },
+      { to: '/historique', label: 'Historique' },
+      { to: '/admin/configuration', label: 'Configuration' },
     ];
   }
 
   if (auth.isFormateur) {
     return [
-      { to: '/plan', label: 'Planification', caption: 'Phase 4' },
-      { to: '/recoltes', label: 'Récoltes', caption: 'Phase 4' },
-      { to: '/arrosages', label: 'Arrosages', caption: 'Phase 4' },
-      { to: '/amendements', label: 'Amendements', caption: 'Phase 4' },
-      { to: '/traitements', label: 'Traitements', caption: 'Phase 4' },
-      { to: '/validation', label: 'Validation', caption: 'Phase 6' },
-      { to: '/historique', label: 'Historique', caption: 'Phase 5' },
-      {
-        to: '/formateur/tableau-de-bord',
-        label: 'Tableau de bord formateur',
-        caption: 'Phase 6',
-      },
+      { to: '/admin/botanique', label: 'Référentiel botanique' },
+      { to: '/admin/sol-planches', label: 'Sol & planches' },
+      { to: '/plan', label: 'Planification' },
+      { to: '/recoltes', label: 'Récoltes' },
+      { to: '/arrosages', label: 'Arrosages' },
+      { to: '/amendements', label: 'Fertilisations' },
+      { to: '/traitements', label: 'Traitements' },
+      { to: '/historique', label: 'Historique' },
+      { to: '/observations', label: 'Observations' },
+      { to: '/validation', label: 'Validation' },
+      { to: '/formateur/tableau-de-bord', label: 'Tableau de bord formateur' },
     ];
   }
 
   return [
-    { to: '/plan-culture', label: 'Plan de culture', caption: 'Phase 4' },
-    { to: '/arrosages', label: 'Arrosages', caption: 'Phase 4' },
-    { to: '/observations', label: 'Mes observations', caption: 'Phase 5' },
+    { to: '/admin/botanique', label: 'Référentiel botanique' },
+    { to: '/plan', label: 'Planification' },
+    { to: '/recoltes', label: 'Récoltes' },
+    { to: '/arrosages', label: 'Arrosages' },
+    { to: '/amendements', label: 'Fertilisations' },
+    { to: '/traitements', label: 'Traitements' },
+    { to: '/historique', label: 'Historique' },
+    { to: '/observations', label: 'Mes observations' },
   ];
 });
+
+const isNavigating = ref(false);
+let hideTimer: ReturnType<typeof setTimeout>;
+const removeBeforeHook = router.beforeEach(() => {
+  clearTimeout(hideTimer);
+  isNavigating.value = true;
+});
+const removeAfterHook = router.afterEach(() => {
+  hideTimer = setTimeout(() => { isNavigating.value = false; }, 300);
+});
+onUnmounted(() => { removeBeforeHook(); removeAfterHook(); clearTimeout(hideTimer); });
+
+// Fermer le tiroir automatiquement après navigation sur mobile
+watch(() => route.fullPath, () => {
+  if (window.innerWidth <= 920) {
+    sidebarOpen.value = false;
+    localStorage.setItem(SIDEBAR_KEY, 'false');
+  }
+});
+
 
 function handleLogout() {
   auth.logout();
   router.push({ name: 'login' });
 }
-
-async function handleRefresh() {
-  try {
-    await auth.fetchCurrentUser();
-  } catch {
-    auth.logout();
-    router.push({ name: 'login' });
-  }
-}
 </script>
+
+<style scoped>
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.nav-spinner {
+  display: inline-block;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 2.5px solid rgba(39, 65, 53, 0.15);
+  border-top-color: var(--brand-olive);
+  border-radius: 50%;
+  animation: nav-spin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes nav-spin {
+  to { transform: rotate(360deg); }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.sidebar .secondary-button {
+  color: rgba(248, 242, 227, 0.88);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  width: 100%;
+}
+
+.sidebar .secondary-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+</style>

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Query,
   Param,
@@ -377,5 +378,15 @@ export class RotationController {
         'Une erreur interne est survenue lors de la création de la section',
       );
     }
+  }
+
+  @Delete('section/:id')
+  @UseGuards(AuthChard, PermissionsGuard)
+  @RequiertPermissions(Permission.DELETE_SECTION)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Annule une culture en supprimant la section (formateur/admin uniquement)' })
+  @ApiParam({ name: 'id', type: Number })
+  async cancelSection(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    await this.rotationService.cancelSection(id);
   }
 }

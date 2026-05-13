@@ -353,6 +353,14 @@
                 <label>Rendement estimé (kg)</label>
                 <input v-model.number="store.vegForm.estimated_yield" type="number" min="1" />
               </div>
+              <div class="field-group">
+                <label>Besoin en azote</label>
+                <select v-model="store.vegForm.nitrogen_need">
+                  <option value="faible">Faible</option>
+                  <option value="moyen">Moyen</option>
+                  <option value="fort">Fort</option>
+                </select>
+              </div>
             </div>
             <p v-if="store.vegModalError" class="modal-error">{{ store.vegModalError }}</p>
           </div>
@@ -519,6 +527,7 @@ h1 {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
+  margin-bottom: 1rem;
 }
 
 .toolbar-filters {

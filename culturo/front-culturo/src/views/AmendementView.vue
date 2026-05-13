@@ -5,7 +5,7 @@
     <div class="view-header">
       <div>
         <p class="view-eyebrow">Fertilisation</p>
-        <h1>Amendements</h1>
+        <h1>Fertilisations</h1>
         <p class="view-sub">Produits appliqués par planche, triés par date décroissante.</p>
       </div>
       <div class="header-actions">
@@ -13,7 +13,7 @@
           📋 Catalogue produits
         </button>
         <button type="button" class="btn-primary" @click="showForm = true">
-          + Nouvel amendement
+          + Nouvelle fertilisation
         </button>
       </div>
     </div>
@@ -117,7 +117,7 @@
           </tr>
         </tbody>
       </table>
-      <div v-else class="state-block">Aucun amendement pour les filtres sélectionnés.</div>
+      <div v-else class="state-block">Aucune fertilisation pour les filtres sélectionnés.</div>
     </div>
 
     <!-- Notice produit (clic sur ligne) -->
@@ -142,7 +142,7 @@
       <!-- Formulaire ajout -->
       <div v-if="showForm" class="modal-overlay" @click.self="closeForm">
         <div class="modal modal-form">
-          <h3>Nouvel amendement</h3>
+          <h3>Nouvelle fertilisation</h3>
 
           <div class="form-grid">
             <div class="form-field form-field-full">
@@ -261,7 +261,7 @@
             <div class="form-field">
               <label>Notice / composition</label>
               <textarea v-model="catalogueForm.notice" rows="3"
-                placeholder="ex: Amendement organique riche en azote. Apporter 2 kg/m² avant binage."
+                placeholder="ex: Fertilisant organique riche en azote. Apporter 2 kg/m² avant binage."
                 class="field-textarea" />
             </div>
             <div class="catalogue-form-actions">
@@ -279,7 +279,7 @@
       <!-- Confirmation suppression -->
       <div v-if="confirmId !== null" class="modal-overlay" @click.self="confirmId = null">
         <div class="modal modal-confirm">
-          <p>Supprimer cet amendement ?</p>
+          <p>Supprimer cette fertilisation ?</p>
           <div class="modal-actions">
             <button type="button" class="btn-danger" @click="doDelete">Supprimer</button>
             <button type="button" class="btn-cancel" @click="confirmId = null">Annuler</button>
@@ -730,7 +730,7 @@ function formatDate(d: string): string {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(39, 65, 53, 0.08);
   border-radius: 22px;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: var(--shadow-soft);
 }
 
@@ -976,5 +976,15 @@ function formatDate(d: string): string {
   .amendement-view { padding: 1.25rem 1rem; }
   .form-grid { grid-template-columns: 1fr; }
   .header-actions { flex-direction: column; width: 100%; }
+}
+
+@media (max-width: 640px) {
+  .amendement-view { padding: 0 0.75rem 1.5rem; }
+  .header-actions { flex-direction: column; width: 100%; }
+  /* Masquer : Sole(5), Exploitation(6), Notes(7) */
+  .data-table th:nth-child(5), .data-table td:nth-child(5),
+  .data-table th:nth-child(6), .data-table td:nth-child(6),
+  .data-table th:nth-child(7), .data-table td:nth-child(7) { display: none; }
+  .filter-group { min-width: 0; flex: 1 1 140px; }
 }
 </style>

@@ -26,6 +26,7 @@ export const useWateringStore = defineStore('watering', () => {
   const waterings = ref<WateringRecord[]>([]);
   const listLoading = ref(false);
   const listError = ref<string | null>(null);
+  const listLoaded = ref(false);
 
   // Arrosages de la section courante (panneau)
   const sectionWaterings = ref<WateringRecord[]>([]);
@@ -36,11 +37,13 @@ export const useWateringStore = defineStore('watering', () => {
   const submitError = ref<string | null>(null);
 
   async function loadAll() {
+    if (listLoaded.value && !listError.value) return;
     listLoading.value = true;
     listError.value = null;
     try {
       const res = await wateringsApi.findAll();
       waterings.value = res.data as WateringRecord[];
+      listLoaded.value = true;
     } catch {
       listError.value = 'Impossible de charger l\'historique des arrosages.';
     } finally {
@@ -64,6 +67,7 @@ export const useWateringStore = defineStore('watering', () => {
     submitError.value = null;
     try {
       await wateringsApi.create({ id_section: sectionId, watering_date: datetime });
+      listLoaded.value = false;
       await loadBySection(sectionId);
     } catch {
       submitError.value = 'Erreur lors de l\'enregistrement de l\'arrosage.';
@@ -82,6 +86,7 @@ export const useWateringStore = defineStore('watering', () => {
         board_id: payload.boardId,
         sole_id: payload.soleId,
       });
+      listLoaded.value = false;
     } catch {
       submitError.value = 'Erreur lors de l\'arrosage en masse.';
       throw new Error(submitError.value);
@@ -94,6 +99,7 @@ export const useWateringStore = defineStore('watering', () => {
     await wateringsApi.remove(id);
     waterings.value = waterings.value.filter((w) => w.id_watering !== id);
     sectionWaterings.value = sectionWaterings.value.filter((w) => w.id_watering !== id);
+    listLoaded.value = false;
   }
 
   return {

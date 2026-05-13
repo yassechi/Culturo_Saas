@@ -1,4 +1,5 @@
 import { StatisticsModule } from './statistics/statistics.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { ExploitationModule } from './exploitations/exploitation.module';
 import { RotationModule } from './rotations/rotation/rotation.module';
 import { AmendementModule } from './amendement/amendement.module';
@@ -48,6 +49,7 @@ const envFilePath =
     TreatmentModule,
     WateringModule,
     StatisticsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

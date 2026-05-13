@@ -1,12 +1,29 @@
-﻿BEGIN;
+BEGIN;
+
+-- Reset tables and identities so a failed previous seed can be retried
+-- without having to remove the Docker volume manually.
+DO $$
+DECLARE
+  truncate_stmt text;
+BEGIN
+  SELECT
+    'TRUNCATE TABLE ' ||
+    string_agg(format('%I.%I', schemaname, tablename), ', ' ORDER BY tablename) ||
+    ' RESTART IDENTITY CASCADE;'
+  INTO truncate_stmt
+  FROM pg_tables
+  WHERE schemaname = 'public';
+
+  EXECUTE truncate_stmt;
+END $$;
 
 -- =====================================================
 -- 1. ROLE
 -- =====================================================
 INSERT INTO role (role_name) VALUES
+('admin'),
 ('formateur'),
-('stagiaire'),
-('admin');
+('stagiaire');
 
 -- =====================================================
 -- 2. FAMILY IMPORTANCE
@@ -45,10 +62,12 @@ INSERT INTO "user_" (
     user_first_name, user_last_name, birth_date,
     email, hpassword, phone, user_active, "id_role"
 ) VALUES
-('Sylvie','Dubois','1980-01-01','sylvie@culturo.be','$2b$10$Xm4X5/K5RIi5PpMLN6jnwenQDDz77mFAar4nhbgIaqxvQERtVtEgu','0471111111',TRUE,1),
+('Sylvie','Dubois','1980-01-01','sylvie@culturo.be','$2b$10$Xm4X5/K5RIi5PpMLN6jnwenQDDz77mFAar4nhbgIaqxvQERtVtEgu','0471111111',TRUE,2),
 ('Marc','Lefevre','1985-05-15','marc@culturo.be','$2b$10$Xm4X5/K5RIi5PpMLN6jnwenQDDz77mFAar4nhbgIaqxvQERtVtEgu','0472222222',TRUE,2),
-('Antoine','Ferma','1995-01-01','antoine@culturo.be','$2b$10$Xm4X5/K5RIi5PpMLN6jnwenQDDz77mFAar4nhbgIaqxvQERtVtEgu','0473333333',TRUE,2),
-('Admin','Culturo','1975-01-01','admin@culturo.be','$2b$10$Xm4X5/K5RIi5PpMLN6jnwenQDDz77mFAar4nhbgIaqxvQERtVtEgu','0474444444',TRUE,3);
+('Antoine','Ferma','1995-01-01','antoine@culturo.be','$2b$10$Xm4X5/K5RIi5PpMLN6jnwenQDDz77mFAar4nhbgIaqxvQERtVtEgu','0473333333',TRUE,3),
+('Admin','Culturo','1975-01-01','admin@culturo.be','$2b$10$Xm4X5/K5RIi5PpMLN6jnwenQDDz77mFAar4nhbgIaqxvQERtVtEgu','0474444444',TRUE,1),
+('Formateur','Formateur','1990-01-01','formateur@culturo.be','$2b$10$bgIlmeBQuvznuzfvwYZINuIGKSzTcXHtWMu3LYjXDamVHqO7MhNl.','0475555555',TRUE,2),
+('Stagiaire','Stagiaire','2000-01-01','stagiaire@culturo.be','$2b$10$bgIlmeBQuvznuzfvwYZINuIGKSzTcXHtWMu3LYjXDamVHqO7MhNl.','0476666666',TRUE,3);
 
 -- =====================================================
 -- 7. EXPLOITATION
@@ -56,41 +75,49 @@ INSERT INTO "user_" (
 INSERT INTO exploitation (
     exploitation_name, exploitation_locality, exploitation_active, "user_idUser"
 ) VALUES
-('Domaine du Chene','Bruxelles',TRUE,1),
-('Hameau Vert','Namur',TRUE,2);
+('Domaine du Chene','Uccle, Bruxelles-Capitale, Belgique',TRUE,1),
+('Hameau Vert','Namur, Namur, Belgique',TRUE,2),
+('Domaines des Oges','Route des Oges 1, 6640 Vaux-sur-Sure, Bastogne, Belgique',TRUE,2);
 
 -- =====================================================
 -- 8. SOLE
 -- =====================================================
 INSERT INTO sole (sole_name, "exploitationIdExploitation") VALUES
-('SOLE Nord',1),('SOLE Sud',1),('SOLE Ouest',2),('SOLE Est',2);
+('SOLE Nord',1),('SOLE Sud',1),
+('SOLE Ouest',2),('SOLE Est',2),
+('Sole X',3);
 
 -- =====================================================
--- 9. BOARD (40 boards)
+-- 9. BOARD (42 boards)
 -- =====================================================
--- SOLE 1 (id_board 1 Ã  10)
+-- SOLE 1 -- Domaine du Chene Nord (id_board 1 a 10)
 INSERT INTO board (board_name, board_width, board_length, board_active, id_sole) VALUES
 ('N1',120,500,TRUE,1),('N2',120,500,TRUE,1),('N3',120,500,TRUE,1),('N4',120,500,TRUE,1),
 ('N5',120,500,TRUE,1),('N6',120,500,TRUE,1),('N7',120,500,TRUE,1),('N8',120,500,TRUE,1),
 ('N9',120,500,TRUE,1),('N10',120,500,TRUE,1);
 
--- SOLE 2 (id_board 11 Ã  20)
+-- SOLE 2 -- Domaine du Chene Sud (id_board 11 a 20)
 INSERT INTO board (board_name, board_width, board_length, board_active, id_sole) VALUES
 ('S2-1',120,500,TRUE,2),('S2-2',120,500,TRUE,2),('S2-3',120,500,TRUE,2),('S2-4',120,500,TRUE,2),
 ('S2-5',120,500,TRUE,2),('S2-6',120,500,TRUE,2),('S2-7',120,500,TRUE,2),('S2-8',120,500,TRUE,2),
 ('S2-9',120,500,TRUE,2),('S2-10',120,500,TRUE,2);
 
--- SOLE 3 (id_board 21 Ã  30)
+-- SOLE 3 -- Hameau Vert Ouest (id_board 21 a 30)
 INSERT INTO board (board_name, board_width, board_length, board_active, id_sole) VALUES
 ('O1',120,500,TRUE,3),('O2',120,500,TRUE,3),('O3',120,500,TRUE,3),('O4',120,500,TRUE,3),
 ('O5',120,500,TRUE,3),('O6',120,500,TRUE,3),('O7',120,500,TRUE,3),('O8',120,500,TRUE,3),
 ('O9',120,500,TRUE,3),('O10',120,500,TRUE,3);
 
--- SOLE 4 (id_board 31 Ã  40)
+-- SOLE 4 -- Hameau Vert Est (id_board 31 a 40)
 INSERT INTO board (board_name, board_width, board_length, board_active, id_sole) VALUES
 ('E1',120,500,TRUE,4),('E2',120,500,TRUE,4),('E3',120,500,TRUE,4),('E4',120,500,TRUE,4),
 ('E5',120,500,TRUE,4),('E6',120,500,TRUE,4),('E7',120,500,TRUE,4),('E8',120,500,TRUE,4),
 ('E9',120,500,TRUE,4),('E10',120,500,TRUE,4);
+
+-- SOLE 5 -- Domaines des Oges / Sole X (id_board 41 a 42)
+INSERT INTO board (board_name, board_width, board_length, board_active, id_sole) VALUES
+('XC1',120,300,TRUE,5),
+('X22',120,300,TRUE,5);
 
 -- =====================================================
 -- 11. VEGETABLE
@@ -127,7 +154,7 @@ INSERT INTO vegetable (
 -- ID 13 (Asteracees - Tertiaire)
 ('Pois','Printemps','Ete',60,80,5,50,160,13),
 -- ID 14 (Poacees - Tertiaire)
-('MaÃ¯s','Printemps','Ete',90,120,25,80,500,14),
+('Mais','Printemps','Ete',90,120,25,80,500,14),
 -- ID 15 (Chenopodiaceae - Tertiaire)
 ('Basilic','Printemps','Ete',30,45,20,30,40,15),
 -- ID 16 (Lamiacees - Tertiaire)
@@ -170,6 +197,9 @@ DECLARE
   raw_creation_date date;
   raw_start_date date;
   current_year int := EXTRACT(YEAR FROM CURRENT_DATE)::int;
+  -- Mémorise la dernière date de fin pour chaque section (1, 2, 3) d'une planche
+  -- afin d'éviter les chevauchements entre années
+  last_end_dates date[];
 BEGIN
   PERFORM setseed(0.4217);
 
@@ -178,6 +208,9 @@ BEGIN
     FROM board
     ORDER BY id_board
   LOOP
+    -- Réinitialiser le suivi des fins de culture pour chaque nouvelle planche
+    last_end_dates := ARRAY[NULL::date, NULL::date, NULL::date];
+
     FOR plan_year IN 2024..current_year LOOP
       creation_month := 1 + floor(random() * 12)::int;
       creation_day := 1 + floor(random() * 28)::int;
@@ -202,12 +235,26 @@ BEGIN
         start_month := 1 + floor(random() * 12)::int;
         start_day := 1 + floor(random() * 28)::int;
         raw_start_date := make_date(plan_year, start_month, start_day);
+
+        -- Jamais de plantation dans le futur
+        IF raw_start_date > CURRENT_DATE THEN
+          raw_start_date := CURRENT_DATE - (floor(random() * 90)::int);
+        END IF;
+
         start_date := raw_start_date;
+
+        -- Si cette section avait déjà une culture, s'assurer qu'on ne chevauche pas
+        IF last_end_dates[section_number] IS NOT NULL
+           AND start_date <= last_end_dates[section_number] THEN
+          start_date := last_end_dates[section_number] + 1;
+        END IF;
+
         duration_days := 45 + floor(random() * 120)::int;
         end_date := start_date + duration_days;
-        IF end_date < start_date THEN
-          end_date := start_date;
-        END IF;
+
+        -- Mémoriser la date de fin pour cette section
+        last_end_dates[section_number] := end_date;
+
         quantity_planted := 40 + floor(random() * 161)::int;
         vegetable_id := 1 + floor(random() * 20)::int;
 
@@ -226,7 +273,9 @@ BEGIN
           end_date::timestamp,
           quantity_planted,
           'unit',
-          TRUE,
+          -- Active si la culture se termine dans 14 jours ou plus,
+          -- recoltee (inactive) si terminee depuis plus de 14 jours
+          end_date >= (CURRENT_DATE - 14),
           plan_id,
           vegetable_id
         );
@@ -238,10 +287,10 @@ END $$;
 -- =====================================================
 -- 14. AMENDED
 -- =====================================================
-INSERT INTO amended (amendment_date, title, description, id_board, amendement_id) VALUES
-('2024-02-01','Compost N1','Applique sur N1',1,1),
-('2024-02-05','Fumier N2','Applique sur N2',2,2),
-('2024-02-10','Engrais vert N3','Applique sur N3',3,3);
+INSERT INTO amended (amendment_date, quantity, quantity_unit, description, id_board, amendement_id) VALUES
+('2024-02-01', 2.50, 'kg', 'Applique sur N1', 1, 1),
+('2024-02-05', 4.00, 'kg', 'Applique sur N2', 2, 2),
+('2024-02-10', 1.50, 'kg', 'Applique sur N3', 3, 3);
 
 -- =====================================================
 -- 15. TREATED
@@ -252,7 +301,7 @@ INSERT INTO treated (treatment_date, treatment_quantity, treatment_unit, "boardI
 ('2024-04-03',6,'L',3,3);
 
 -- =====================================================
--- 16. WATERING (Exemples pour les premiÃ¨res sections - ID 1 Ã  5)
+-- 16. WATERING
 -- =====================================================
 INSERT INTO watering(watering_date, "sectionIdSection") VALUES
 ('2024-04-05',1),
@@ -262,7 +311,7 @@ INSERT INTO watering(watering_date, "sectionIdSection") VALUES
 ('2024-04-11',5);
 
 -- =====================================================
--- 17. HARVEST (Exemples pour les sections terminÃ©es)
+-- 17. HARVEST
 -- =====================================================
 INSERT INTO harvest(harvest_date, quantity, quantity_unit, "user_idUser", "sectionIdSection") VALUES
 ('2024-07-01', 50, 'kg', 1, 1),

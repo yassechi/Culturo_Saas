@@ -13,7 +13,12 @@
       "Bash(docker exec *)",
       "Bash(xargs grep *)",
       "Bash(docker restart *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(git *)",
+      "Bash(grep -v \".vue:$\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")",
+      "Bash(python3 *)",
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"E:\\\\Projets\\\\Culturo_Saas\\\\culturo\\\\front-culturo\\\\public\\\\favicon.svg\"\\); $b64 = [Convert]::ToBase64String\\($bytes\\); Write-Output \"data:image/svg+xml;base64,$b64\")"
     ]
   }
 }

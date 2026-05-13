@@ -27,4 +27,12 @@ export const usersApi = {
       id_role: data.roleId,
     });
   },
+
+  forgotPassword(email: string) {
+    return apiClient.post('/users/forgot-password', { email });
+  },
+
+  resetPassword(token: string, newPassword: string) {
+    return apiClient.post('/users/reset-password', { token, newPassword });
+  },
 };

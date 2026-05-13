@@ -35,16 +35,17 @@
         <small>{{ pendingLabel }}</small>
       </article>
 
-      <article class="stat-card">
-        <span>Alertes rotation</span>
-        <strong>{{ dashboard.summary?.rotations.alertCount ?? 0 }}</strong>
-        <small>Année suivante à anticiper</small>
-      </article>
 
       <article class="stat-card">
         <span>Saisies 7 jours</span>
         <strong>{{ dashboard.observations?.recentSevenDays ?? 0 }}</strong>
         <small>Activité terrain récente</small>
+      </article>
+
+      <article class="stat-card" :class="{ 'stat-card--alert': dashboard.rotationAlertCount > 0 }">
+        <span>Violations rotation</span>
+        <strong>{{ dashboard.rotationAlertCount }}</strong>
+        <small>Règle des 5 ans enfreinte</small>
       </article>
     </section>
 
@@ -75,36 +76,31 @@
         <div class="section-head">
           <div>
             <span class="eyebrow">Rotation</span>
-            <h2>Alertes à venir</h2>
+            <h2>Violations de rotation</h2>
           </div>
-          <span class="section-chip">{{ dashboard.rotationAlerts.length }} visible(s)</span>
+          <span class="section-chip" :class="{ 'chip--alert': dashboard.rotationAlertCount > 0 }">
+            {{ dashboard.rotationAlertCount }} violation(s)
+          </span>
         </div>
 
         <div v-if="dashboard.loading" class="empty-state compact">
-          Chargement des alertes...
+          Chargement...
         </div>
         <div v-else-if="dashboard.rotationAlerts.length === 0" class="empty-state compact">
-          Aucune alerte de rotation remontée pour le moment.
+          Aucune violation détectée. Les rotations sont respectées.
         </div>
-        <div v-else class="alert-list">
+        <div v-else class="violation-scroll">
           <article
             v-for="alert in dashboard.rotationAlerts"
             :key="`${alert.boardId}-${alert.familyId}`"
-            class="alert-card"
+            class="violation-card"
           >
-            <div class="alert-head">
+            <div class="violation-head">
               <strong>{{ alert.boardName }}</strong>
-              <span class="alert-badge">{{ alert.familyName }}</span>
+              <span class="violation-badge">{{ alert.familyName }}</span>
             </div>
-            <p>
-              {{ alert.exploitationName ?? 'Exploitation' }}
-              <template v-if="alert.soleName">· {{ alert.soleName }}</template>
-            </p>
-            <small>
-              Dernière culture observée :
-              {{ alert.lastCultivationDate ? formatDate(alert.lastCultivationDate) : 'date inconnue' }}
-              <template v-if="alert.activeThisYear">· encore active cette année</template>
-            </small>
+            <p>{{ alert.exploitationName ?? 'Exploitation' }}<template v-if="alert.soleName"> · {{ alert.soleName }}</template></p>
+            <small>Replantée le {{ alert.lastCultivationDate ? formatDate(alert.lastCultivationDate) : 'date inconnue' }} — moins de 5 ans après la précédente</small>
           </article>
         </div>
       </article>
@@ -305,7 +301,6 @@ function statusClass(status: ObservationReviewStatus) {
 .stat-card,
 .dashboard-card,
 .action-card,
-.alert-card,
 .observation-card,
 .contributor-card,
 .mini-card {
@@ -415,7 +410,6 @@ function statusClass(status: ObservationReviewStatus) {
 }
 
 .section-chip,
-.alert-badge,
 .status-badge {
   padding: 0.42rem 0.78rem;
   border-radius: 999px;
@@ -445,27 +439,83 @@ function statusClass(status: ObservationReviewStatus) {
 }
 
 .action-card strong,
-.alert-head strong,
 .observation-head strong,
 .contributor-card strong {
   color: var(--brand-deep);
 }
 
-.alert-list,
+
 .observation-list,
 .contributor-list {
   display: grid;
   gap: 0.85rem;
 }
 
-.alert-card,
+.stat-card--alert strong {
+  color: #b85c2a;
+}
+
+.chip--alert {
+  background: rgba(181, 106, 67, 0.14);
+  color: #8b4d2d;
+}
+
+.violation-scroll {
+  display: grid;
+  gap: 0.75rem;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.violation-scroll::-webkit-scrollbar { width: 4px; }
+.violation-scroll::-webkit-scrollbar-track { background: transparent; }
+.violation-scroll::-webkit-scrollbar-thumb { background: rgba(181, 106, 67, 0.3); border-radius: 2px; }
+
+.violation-card {
+  padding: 0.85rem 1rem;
+  background: rgba(181, 106, 67, 0.06);
+  border: 1px solid rgba(181, 106, 67, 0.2);
+  border-radius: var(--radius-lg);
+}
+
+.violation-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.3rem;
+}
+
+.violation-head strong { color: var(--brand-deep); }
+
+.violation-badge {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: rgba(181, 106, 67, 0.16);
+  color: #8b4d2d;
+  flex-shrink: 0;
+}
+
+.violation-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.violation-card small {
+  color: #b85c2a;
+  font-size: 0.82rem;
+}
+
 .observation-card,
 .contributor-card,
 .mini-card {
   padding: 1rem;
 }
 
-.alert-head,
 .observation-head {
   display: flex;
   justify-content: space-between;
@@ -473,22 +523,15 @@ function statusClass(status: ObservationReviewStatus) {
   align-items: start;
 }
 
-.alert-card p,
-.alert-card small,
 .observation-card p,
 .observation-card small {
   margin: 0;
 }
 
-.alert-card p,
 .observation-card p {
   margin-top: 0.45rem;
 }
 
-.alert-badge {
-  background: rgba(181, 106, 67, 0.14);
-  color: #8b4d2d;
-}
 
 .contributor-card {
   display: grid;
@@ -572,7 +615,6 @@ function statusClass(status: ObservationReviewStatus) {
   }
 
   .section-head,
-  .alert-head,
   .observation-head,
   .contributor-metrics {
     flex-direction: column;

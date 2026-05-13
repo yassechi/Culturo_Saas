@@ -14,6 +14,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { VarietyController } from './varieties/variety.controller';
 import { VarietyService } from './varieties/variety.service';
 import { Variety } from 'src/entities/variety.entity';
+import { FamilyIncompatibility } from 'src/entities/family_incompatibility.entity';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { Variety } from 'src/entities/variety.entity';
       Family_importance,
       Section,
       Variety,
+      FamilyIncompatibility,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],

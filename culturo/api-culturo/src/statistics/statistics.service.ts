@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Board } from 'src/entities/board.entity';
+import { Family } from 'src/entities/family.entity';
 import { Observation } from 'src/entities/observation.entity';
 import { Section } from 'src/entities/section.entity';
 import { SectionPlan } from 'src/entities/section_plan.entity';
 import type { JWTPayloadType } from 'src/utils/types';
 import { Repository } from 'typeorm';
+
+type GroupedEntry = { board: Board; family: Family; dates: Date[] };
 
 type DashboardRotationAlert = {
   boardId: number;
@@ -52,7 +55,7 @@ export class StatisticsService {
       observations: observations.summary,
       rotations: {
         alertCount: rotations.length,
-        alerts: rotations.slice(0, 6),
+        alerts: rotations,
       },
       contributors: payload.role === 'stagiaire' ? [] : observations.contributors,
       recentObservations: observations.recentObservations,
@@ -60,7 +63,7 @@ export class StatisticsService {
   }
 
   private async computePlanningSummary() {
-    const [activeBoards, activePlans, occupiedSections] = await Promise.all([
+    const [activeBoards, activePlans, occupiedSections, totalSections] = await Promise.all([
       this.boardRepository.count({ where: { board_active: true } }),
       this.sectionPlanRepository
         .createQueryBuilder('sectionPlan')
@@ -78,12 +81,14 @@ export class StatisticsService {
         .andWhere('sectionPlan.section_plan_active = TRUE')
         .andWhere('board.board_active = TRUE')
         .getCount(),
+      this.sectionRepository
+        .createQueryBuilder('section')
+        .leftJoin('section.sectionPlan', 'sectionPlan')
+        .leftJoin('sectionPlan.board', 'board')
+        .where('sectionPlan.section_plan_active = TRUE')
+        .andWhere('board.board_active = TRUE')
+        .getCount(),
     ]);
-
-    const totalSections = activePlans.reduce(
-      (sum, plan) => sum + plan.number_of_section,
-      0,
-    );
 
     const activeSoles = new Set(
       activePlans
@@ -195,10 +200,7 @@ export class StatisticsService {
   }
 
   private async computeRotationAlerts(): Promise<DashboardRotationAlert[]> {
-    const fiveYearsAgo = new Date();
-    fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
-    fiveYearsAgo.setHours(0, 0, 0, 0);
-
+    // Fetch all sections with a primary family, no date filter — we compare dates ourselves
     const sections = await this.sectionRepository
       .createQueryBuilder('section')
       .leftJoinAndSelect('section.vegetable', 'vegetable')
@@ -209,58 +211,63 @@ export class StatisticsService {
       .leftJoinAndSelect('board.sole', 'sole')
       .leftJoinAndSelect('sole.exploitation', 'exploitation')
       .where('board.board_active = TRUE')
-      .andWhere('section.end_date >= :fiveYearsAgo', { fiveYearsAgo })
       .andWhere('familyImportance.importance_name = :importance', {
         importance: 'primaire',
       })
       .getMany();
 
-    const alertsMap = new Map<string, DashboardRotationAlert>();
+    // Group sections by board+family
+    const grouped = new Map<string, GroupedEntry>();
 
-    sections.forEach((section) => {
-      if (!section.vegetable?.family || !section.sectionPlan?.board) {
-        return;
-      }
-
+    for (const section of sections) {
+      if (!section.vegetable?.family || !section.sectionPlan?.board) continue;
       const board = section.sectionPlan.board;
       const family = section.vegetable.family;
       const key = `${board.id_board}-${family.id_family}`;
-      const currentDate = section.end_date ? new Date(section.end_date) : null;
+      const date = section.start_date ? new Date(section.start_date) : null;
+      if (!date) continue;
 
-      const previous = alertsMap.get(key);
+      if (!grouped.has(key)) {
+        grouped.set(key, { board, family, dates: [] });
+      }
+      grouped.get(key)!.dates.push(date);
+    }
 
-      if (
-        previous &&
-        previous.lastCultivationDate &&
-        currentDate &&
-        previous.lastCultivationDate >= currentDate
-      ) {
-        if (section.section_active) {
-          previous.activeThisYear = true;
+    const fiveYearsMs = 5 * 365.25 * 24 * 60 * 60 * 1000;
+    const violations: DashboardRotationAlert[] = [];
+
+    for (const { board, family, dates } of grouped.values()) {
+      if (dates.length < 2) continue;
+
+      // Sort dates ascending and check if any two plantings are within 5 years
+      dates.sort((a, b) => a.getTime() - b.getTime());
+
+      let violationDate: Date | null = null;
+      for (let i = 1; i < dates.length; i++) {
+        const gap = dates[i].getTime() - dates[i - 1].getTime();
+        if (gap < fiveYearsMs) {
+          violationDate = dates[i]; // most recent planting that caused the violation
         }
-        return;
       }
 
-      alertsMap.set(key, {
+      if (!violationDate) continue;
+
+      violations.push({
         boardId: board.id_board,
         boardName: board.board_name,
         soleName: board.sole?.sole_name ?? null,
         exploitationName: board.sole?.exploitation?.exploitation_name ?? null,
         familyId: family.id_family,
         familyName: family.family_name,
-        lastCultivationDate: currentDate,
-        activeThisYear: section.section_active,
+        lastCultivationDate: violationDate,
+        activeThisYear: false,
       });
-    });
+    }
 
-    return [...alertsMap.values()].sort((left, right) => {
-      const leftTime = left.lastCultivationDate
-        ? new Date(left.lastCultivationDate).getTime()
-        : 0;
-      const rightTime = right.lastCultivationDate
-        ? new Date(right.lastCultivationDate).getTime()
-        : 0;
-      return rightTime - leftTime;
+    return violations.sort((a, b) => {
+      const aTime = a.lastCultivationDate ? new Date(a.lastCultivationDate).getTime() : 0;
+      const bTime = b.lastCultivationDate ? new Date(b.lastCultivationDate).getTime() : 0;
+      return bTime - aTime;
     });
   }
 }

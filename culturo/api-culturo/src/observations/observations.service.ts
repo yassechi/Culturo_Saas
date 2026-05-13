@@ -16,6 +16,7 @@ import { Brackets, Repository } from 'typeorm';
 import { CreateObservationDTO } from './dtos/create.observation.dto';
 import { ListObservationsQueryDTO } from './dtos/list.observations.query.dto';
 import { ReviewObservationDTO } from './dtos/review.observation.dto';
+import { EmailService } from 'src/email/email.service';
 
 @Injectable()
 export class ObservationsService {
@@ -26,6 +27,7 @@ export class ObservationsService {
     private readonly sectionRepository: Repository<Section>,
     @InjectRepository(User_)
     private readonly userRepository: Repository<User_>,
+    private readonly emailService: EmailService,
   ) {}
 
   async findAll(
@@ -180,7 +182,22 @@ export class ObservationsService {
 
     await this.observationRepository.save(observation);
 
-    return this.findOne(observation.id_observation, payload);
+    const saved = await this.findOne(observation.id_observation, payload);
+
+    // Notifier les formateurs actifs en arrière-plan (ne bloque pas la réponse)
+    this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('user.role', 'role')
+      .where('role.role_name IN (:...roles)', { roles: ['formateur', 'admin'] })
+      .andWhere('user.user_active = true')
+      .select(['user.email', 'user.user_first_name'])
+      .getMany()
+      .then((formateurs) =>
+        this.emailService.sendObservationSubmittedToFormateurs(formateurs, author, saved),
+      )
+      .catch(() => {/* log déjà géré dans EmailService */});
+
+    return saved;
   }
 
   async review(
@@ -219,7 +236,20 @@ export class ObservationsService {
 
     await this.observationRepository.save(observation);
 
-    return this.findOne(id, payload);
+    const reviewed = await this.findOne(id, payload);
+
+    // Notifier le stagiaire auteur en arrière-plan
+    this.emailService
+      .sendObservationReviewedToStagiaire(
+        reviewed.author,
+        reviewer,
+        reviewed,
+        dto.reviewStatus,
+        dto.reviewNotes,
+      )
+      .catch(() => {/* log déjà géré dans EmailService */});
+
+    return reviewed;
   }
 
   private buildObservationQuery() {

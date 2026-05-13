@@ -27,6 +27,9 @@ export interface CulturePlanEntry {
   vegetableId: number;
   vegetableName: string;
   varietyName: string | null;
+  familyName: string | null;
+  familyType: string | null;
+  quantityPlanted: number;
   startDate: string;
   endDate: string;
 }
@@ -38,7 +41,10 @@ export interface PlantableVegetable {
   familyName: string;
   importance: string;
   lastPlantedInSection: string | null;
+  lastQuantityPlanted: number | null;
   neverPlantedInSection: boolean;
+  associationWarning: boolean;
+  associationWarningReason: string | null;
 }
 
 export interface SectionPlanResult {
@@ -90,6 +96,8 @@ export interface SelectedSection {
   boardName: string;
   sectionNumber: number;
   sectionPlanId: number | null;
+  plantingMode: boolean;
+  harvestSectionId?: number; // sectionId exact (DB) pour le mode récolte
 }
 
 export interface AssignmentForm {

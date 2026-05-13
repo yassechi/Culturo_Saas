@@ -61,15 +61,18 @@ export class HarvestService {
      */
     async create(dto: CreateHarvestDTO): Promise<Harvest> {
         // --- 1. Vérification des dépendances ---
-        
+        console.log('[HarvestService.create] dto reçu:', JSON.stringify(dto));
+
         const user = await this.userRepository.findOne({
             where: { id_user: dto.userId },
         });
+        console.log('[HarvestService.create] user trouvé:', user ? `id=${user.id_user}` : 'NULL');
         if (!user) throw new NotFoundException('User not found');
 
         const section = await this.sectionRepository.findOne({
             where: { id_section: dto.id_section },
         });
+        console.log('[HarvestService.create] section trouvée:', section ? `id=${section.id_section}` : 'NULL');
         if (!section) throw new NotFoundException('Section not found');
 
         // --- 2. Mise à jour de la Section ---

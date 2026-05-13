@@ -62,57 +62,101 @@
             :class="{ open: showCompatible }"
             @click="showCompatible = !showCompatible"
           >
-            <div class="section-title-row">
+            <div class="section-toggle-left">
               <h4>Légumes compatibles</h4>
               <span class="count-chip count-ok">{{ store.plantableVegetables.length }}</span>
             </div>
             <span class="toggle-arrow">{{ showCompatible ? '▲' : '▼' }}</span>
           </button>
 
-          <div v-if="showCompatible && store.vegetableGroups.length === 0 && occupyingEntry" class="occupied-banner">
-            <p>
-              <strong>{{ occupyingEntry.vegetableName }}</strong> occupe cette section
-              jusqu'au <strong>{{ formatDate(occupyingEntry.endDate) }}</strong>.
-            </p>
-            <button type="button" class="btn-plant-after" @click="plantAfterOccupation">
-              Planter à la suite →
-            </button>
-          </div>
-          <div v-else-if="showCompatible && store.vegetableGroups.length === 0" class="inline-empty">
-            Aucun légume compatible avec les règles de rotation pour cette section.
-          </div>
+          <template v-if="showCompatible">
+            <div v-if="store.vegetableGroups.length === 0 && occupyingEntry" class="occupied-banner">
+              <p>
+                <strong>{{ occupyingEntry.vegetableName }}</strong> occupe cette section
+                jusqu'au <strong>{{ formatDate(occupyingEntry.endDate) }}</strong>.
+              </p>
+              <button type="button" class="btn-plant-after" @click="plantAfterOccupation">
+                Planter à la suite →
+              </button>
+            </div>
+            <div v-else-if="store.vegetableGroups.length === 0" class="inline-empty">
+              Aucun légume compatible avec les règles de rotation pour cette section.
+            </div>
 
-          <div v-else-if="showCompatible" class="vegetable-groups">
-            <div
-              v-for="group in store.vegetableGroups"
-              :key="group.familyName"
-              class="veg-group"
-            >
-              <div class="group-header">
-                <span class="family-name">{{ group.familyName }}</span>
-                <span v-if="group.neverPlanted" class="badge-never">Jamais planté ici</span>
-                <span v-else-if="group.lastPlantedDate" class="badge-date">
-                  Dernier : {{ formatDate(group.lastPlantedDate) }}
-                </span>
-              </div>
-              <div class="veg-list">
-                <button
-                  v-for="veg in group.vegetables"
-                  :key="veg.vegetableId"
-                  type="button"
-                  class="veg-btn"
-                  :class="{ selected: store.assignmentForm.vegetableId === veg.vegetableId }"
-                  @click="selectVegetable(veg.vegetableId)"
-                >
-                  <span class="veg-btn-name">{{ veg.vegetableName }}</span>
-                  <span v-if="veg.neverPlantedInSection" class="veg-badge-never">jamais planté</span>
-                  <span v-else-if="veg.lastPlantedInSection" class="veg-badge-date">
-                    {{ formatDate(veg.lastPlantedInSection) }}
+            <div v-else class="vegetable-groups">
+              <div
+                v-for="group in store.vegetableGroups"
+                :key="group.familyName"
+                class="veg-group"
+              >
+                <div class="group-header">
+                  <span class="family-name">{{ group.familyName }}</span>
+                  <span v-if="group.neverPlanted" class="badge-never">Jamais planté ici</span>
+                  <span v-else-if="group.lastPlantedDate" class="badge-date">
+                    Dernier : {{ formatDate(group.lastPlantedDate) }}
                   </span>
-                </button>
+                </div>
+                <div class="veg-list">
+                  <div
+                    v-for="veg in group.vegetables"
+                    :key="veg.vegetableId"
+                    class="veg-item"
+                  >
+                    <button
+                      type="button"
+                      class="veg-btn"
+                      :class="{
+                        selected: store.assignmentForm.vegetableId === veg.vegetableId,
+                        'veg-btn-assoc-warn': veg.associationWarning,
+                      }"
+                      :title="veg.associationWarning ? `Association déconseillée : ${veg.associationWarningReason}` : undefined"
+                      @click="selectVegetable(veg.vegetableId)"
+                    >
+                      <span class="veg-btn-name">{{ veg.vegetableName }}</span>
+                      <span v-if="veg.associationWarning" class="veg-badge-assoc" title="Association déconseillée">⚠</span>
+                      <span v-else-if="veg.neverPlantedInSection" class="veg-badge-never">jamais planté</span>
+                      <span v-else-if="veg.lastPlantedInSection" class="veg-badge-date">
+                        {{ formatDate(veg.lastPlantedInSection) }}<template v-if="veg.lastQuantityPlanted"> · {{ veg.lastQuantityPlanted }} pl.</template>
+                      </span>
+                    </button>
+
+                    <!-- Variétés inline — affichées dès que ce légume est sélectionné -->
+                    <div
+                      v-if="store.assignmentForm.vegetableId === veg.vegetableId"
+                      class="veg-varieties"
+                    >
+                      <span v-if="varietiesLoading" class="varieties-loading">Chargement variétés…</span>
+                      <template v-else>
+                        <button
+                          v-for="v in currentVarieties"
+                          :key="v.id_variety"
+                          type="button"
+                          class="variety-chip"
+                          :class="{ 'variety-chip-selected': store.assignmentForm.varietyIdentifier === v.variety_name }"
+                          @click.stop="selectVariety(v.variety_name)"
+                        >{{ v.variety_name }}</button>
+                        <button
+                          type="button"
+                          class="variety-chip variety-chip-custom"
+                          :class="{ 'variety-chip-selected': varietySelectValue === '__custom__' }"
+                          @click.stop="selectVariety('__custom__')"
+                        >Autre…</button>
+                        <span v-if="currentVarieties.length === 0" class="varieties-none">Aucune variété enregistrée</span>
+                      </template>
+                      <input
+                        v-if="varietySelectValue === '__custom__'"
+                        v-model="store.assignmentForm.varietyIdentifier"
+                        type="text"
+                        class="variety-custom-inline"
+                        placeholder="Saisir une variété…"
+                        @click.stop
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
         </section>
 
         <!-- ── Légumes avec restrictions (mode plantation uniquement) ────── -->
@@ -180,7 +224,6 @@
                 id="start-date"
                 v-model="store.assignmentForm.startDate"
                 type="date"
-                :min="todayIso"
                 required
               />
             </div>
@@ -194,43 +237,28 @@
                 required
               />
             </div>
-            <div class="form-field form-field-full">
-              <label for="variety">Variété</label>
-              <div v-if="varietiesLoading" class="variety-loading">Chargement…</div>
-              <template v-else>
-                <select
-                  v-if="currentVarieties.length > 0"
-                  id="variety"
-                  class="variety-select"
-                  :value="varietySelectValue"
-                  @change="onVarietyChange"
-                >
-                  <option value="">— Sélectionner une variété —</option>
-                  <option
-                    v-for="v in currentVarieties"
-                    :key="v.id_variety"
-                    :value="v.variety_name"
-                  >{{ v.variety_name }}</option>
-                  <option value="__custom__">Autre (saisie libre)…</option>
-                </select>
-                <input
-                  v-if="currentVarieties.length === 0 || varietySelectValue === '__custom__'"
-                  id="variety-custom"
-                  v-model="store.assignmentForm.varietyIdentifier"
-                  type="text"
-                  :placeholder="currentVarieties.length === 0 ? 'ex: Marmande, Roma…' : 'Saisir une variété…'"
-                  class="variety-custom-input"
-                />
-              </template>
+            <div v-if="store.assignmentForm.varietyIdentifier" class="form-field form-field-full">
+              <label>Variété sélectionnée</label>
+              <span class="variety-selected-badge">{{ store.assignmentForm.varietyIdentifier }}</span>
             </div>
             <div class="form-field">
               <label for="qty">Quantité</label>
-              <input
-                id="qty"
-                v-model.number="store.assignmentForm.quantityPlanted"
-                type="number"
-                min="0"
-              />
+              <div class="qty-row">
+                <input
+                  id="qty"
+                  v-model.number="store.assignmentForm.quantityPlanted"
+                  type="number"
+                  min="0"
+                  class="qty-input"
+                />
+                <select v-model="store.assignmentForm.unity" class="qty-unit">
+                  <option value="kg">kg</option>
+                  <option value="pièces">pièces</option>
+                  <option value="plants">plants</option>
+                  <option value="bottes">bottes</option>
+                  <option value="graines">graines</option>
+                </select>
+              </div>
             </div>
           </div>
         </section>
@@ -291,6 +319,159 @@
             @click="confirmHarvest"
           >
             {{ harvestStore.loading ? 'Enregistrement…' : 'Confirmer la récolte' }}
+          </button>
+
+          <div v-if="!auth.isStagiaire" class="cancel-section-block">
+            <p v-if="cancelError" class="cancel-error">{{ cancelError }}</p>
+            <template v-if="cancelConfirming">
+              <p class="cancel-confirm-text">Confirmer la suppression de cette culture ? Cette action est irréversible.</p>
+              <div class="cancel-confirm-actions">
+                <button type="button" class="cancel-section-btn" :disabled="cancelLoading" @click="cancelSection">
+                  {{ cancelLoading ? 'Annulation…' : 'Oui, supprimer' }}
+                </button>
+                <button type="button" class="cancel-confirm-abort" @click="cancelConfirming = false">
+                  Non, garder
+                </button>
+              </div>
+            </template>
+            <button v-else type="button" class="cancel-section-btn" @click="cancelConfirming = true">
+              Annuler cette culture
+            </button>
+          </div>
+        </section>
+
+        <!-- ── Fertilisation ────────────────────────────────────────────── -->
+        <section class="panel-section panel-section-fertil">
+          <div class="fertil-header">
+            <span class="fertil-icon">🌱</span>
+            <h4>Fertiliser</h4>
+          </div>
+
+          <div class="water-scope">
+            <label class="scope-option">
+              <input type="radio" v-model="fertilScope" value="board" />
+              Planche entière
+              <span class="scope-name scope-name-fertil">{{ store.openSection!.boardName }}</span>
+            </label>
+            <label v-if="currentSole" class="scope-option">
+              <input type="radio" v-model="fertilScope" value="sole" />
+              Sole entière
+              <span class="scope-name scope-name-fertil">{{ currentSole.sole_name }}</span>
+            </label>
+          </div>
+
+          <div class="form-grid" style="margin-top: 0.65rem;">
+            <div class="form-field form-field-full">
+              <label for="fertil-type">Type d'amendement *</label>
+              <select id="fertil-type" v-model="fertilCatalogueId" class="variety-select">
+                <option value="">— Choisir —</option>
+                <option
+                  v-for="item in amendementStore.catalogue"
+                  :key="item.id_amendement"
+                  :value="item.id_amendement"
+                >{{ item.amendment_name }}</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="fertil-date">Date *</label>
+              <input id="fertil-date" v-model="fertilDate" type="date" :max="todayIso" />
+            </div>
+            <div class="form-field">
+              <label for="fertil-qty">Quantité</label>
+              <input id="fertil-qty" v-model.number="fertilQty" type="number" min="0" placeholder="ex: 2" />
+            </div>
+            <div class="form-field form-field-full">
+              <label for="fertil-unit">Unité</label>
+              <select id="fertil-unit" v-model="fertilUnit" class="variety-select">
+                <option value="kg">kg</option>
+                <option value="L">L</option>
+                <option value="g">g</option>
+                <option value="mL">mL</option>
+                <option value="sacs">sacs</option>
+              </select>
+            </div>
+            <div class="form-field form-field-full">
+              <label for="fertil-desc">Description</label>
+              <input id="fertil-desc" v-model="fertilDesc" type="text" placeholder="ex: Appliqué en surface…" />
+            </div>
+          </div>
+
+          <p v-if="amendementStore.submitError" class="water-error">{{ amendementStore.submitError }}</p>
+
+          <button
+            type="button"
+            class="fertil-btn"
+            :disabled="amendementStore.submitting || !fertilCatalogueId"
+            @click="doFertil"
+          >
+            {{ amendementStore.submitting ? 'Enregistrement…' : 'Appliquer la fertilisation' }}
+          </button>
+        </section>
+
+        <!-- ── Traitement ─────────────────────────────────────────────────── -->
+        <section class="panel-section panel-section-treat">
+          <div class="treat-header">
+            <span class="treat-icon">🧪</span>
+            <h4>Traiter</h4>
+          </div>
+
+          <div class="water-scope">
+            <label class="scope-option">
+              <input type="radio" v-model="treatScope" value="board" />
+              Planche entière
+              <span class="scope-name scope-name-treat">{{ store.openSection!.boardName }}</span>
+            </label>
+            <label v-if="currentSole" class="scope-option">
+              <input type="radio" v-model="treatScope" value="sole" />
+              Sole entière
+              <span class="scope-name scope-name-treat">{{ currentSole.sole_name }}</span>
+            </label>
+          </div>
+
+          <div class="form-grid" style="margin-top: 0.65rem;">
+            <div class="form-field form-field-full">
+              <label for="treat-type">Type de traitement *</label>
+              <select id="treat-type" v-model="treatCatalogueId" class="variety-select">
+                <option value="">— Choisir —</option>
+                <option
+                  v-for="item in treatmentStore.catalogue"
+                  :key="item.id_treatment"
+                  :value="item.id_treatment"
+                >{{ item.treatment_name }}</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="treat-date">Date *</label>
+              <input id="treat-date" v-model="treatDate" type="date" :max="todayIso" />
+            </div>
+            <div class="form-field">
+              <label for="treat-qty">Quantité</label>
+              <input id="treat-qty" v-model.number="treatQty" type="number" min="0" placeholder="ex: 5" />
+            </div>
+            <div class="form-field form-field-full">
+              <label for="treat-unit">Unité</label>
+              <select id="treat-unit" v-model="treatUnit" class="variety-select">
+                <option value="L">L</option>
+                <option value="mL">mL</option>
+                <option value="kg">kg</option>
+                <option value="g">g</option>
+              </select>
+            </div>
+            <div class="form-field form-field-full">
+              <label for="treat-desc">Notes</label>
+              <input id="treat-desc" v-model="treatDesc" type="text" placeholder="ex: Dilué à 2%…" />
+            </div>
+          </div>
+
+          <p v-if="treatmentStore.submitError" class="water-error">{{ treatmentStore.submitError }}</p>
+
+          <button
+            type="button"
+            class="treat-btn"
+            :disabled="treatmentStore.submitting || !treatCatalogueId"
+            @click="doTreat"
+          >
+            {{ treatmentStore.submitting ? 'Enregistrement…' : 'Appliquer le traitement' }}
           </button>
         </section>
 
@@ -358,6 +539,15 @@
           </template>
         </section>
 
+        <!-- ── Succès plantation ─────────────────────────────────────────── -->
+        <div v-if="plantingSuccess" class="planting-success-banner">
+          <span class="success-icon">✅</span>
+          <div>
+            <strong>Culture enregistrée !</strong>
+            <p>La plantation a bien été sauvegardée. Fermeture…</p>
+          </div>
+        </div>
+
         <!-- ── Actions ────────────────────────────────────────────────────── -->
         <footer class="panel-footer">
           <!-- Mode plantation uniquement -->
@@ -400,12 +590,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, toRef } from 'vue';
 import { usePlanningStore } from '@/stores/planning';
 import { useAuthStore } from '@/stores/auth';
 import { useBotanicalStore } from '@/stores/botanical';
 import { useHarvestStore } from '@/stores/harvest';
 import { useWateringStore } from '@/stores/watering';
+import { useAmendementStore } from '@/stores/amendement';
+import { useTreatmentStore } from '@/stores/treatment';
+import { rotationsApi } from '@/api/rotations';
 import RotationRuleMessage from './RotationRuleMessage.vue';
 
 const store = usePlanningStore();
@@ -413,6 +606,8 @@ const auth = useAuthStore();
 const botanical = useBotanicalStore();
 const harvestStore = useHarvestStore();
 const wateringStore = useWateringStore();
+const amendementStore = useAmendementStore();
+const treatmentStore = useTreatmentStore();
 
 const showRestricted = ref(false);
 const showCompatible = ref(false);
@@ -476,6 +671,11 @@ function clearSearch() {
   vegSearch.value = '';
   showSuggestions.value = false;
   searchInputEl.value?.focus();
+}
+
+function selectVariety(name: string) {
+  varietySelectValue.value = name;
+  store.assignmentForm.varietyIdentifier = name === '__custom__' ? '' : name;
 }
 
 function hideSuggestionsDelayed() {
@@ -579,10 +779,9 @@ const isFormValid = computed(() => {
   const f = store.assignmentForm;
   return (
     f.vegetableId !== null &&
-    f.startDate &&
-    f.endDate &&
-    f.startDate <= f.endDate &&
-    f.startDate >= todayIso
+    !!f.startDate &&
+    !!f.endDate &&
+    f.startDate <= f.endDate
   );
 });
 
@@ -603,22 +802,29 @@ const canBypass = computed(
     !harvestableEntry.value,
 );
 
-onMounted(async () => {
-  // Charger les derniers arrosages si on a un sectionId
+async function loadPanelData() {
   if (harvestableEntry.value?.sectionId) {
     wateringStore.loadBySection(harvestableEntry.value.sectionId);
   }
-
-  // En mode récolte, pas besoin de charger le catalogue
   if (harvestableEntry.value) return;
-
   const botanicalPromise =
     botanical.families.length === 0 ? botanical.loadAll() : Promise.resolve();
   await Promise.all([botanicalPromise, store.loadPlantableVegetables()]);
-
-  // Auto-select vegetable from vegetable-first search
   if (store.assignmentForm.vegetableId !== null) {
     await store.checkVegetableCompatibility(store.assignmentForm.vegetableId);
+  }
+}
+
+onMounted(() => {
+  loadPanelData();
+  amendementStore.loadCatalogue();
+  treatmentStore.loadCatalogue();
+});
+
+watch(toRef(store, 'openSection'), (newSection, oldSection) => {
+  if (!newSection) return;
+  if (newSection.boardId !== oldSection?.boardId || newSection.sectionNumber !== oldSection?.sectionNumber) {
+    loadPanelData();
   }
 });
 
@@ -662,9 +868,15 @@ async function selectVegetable(id: number) {
 
 // ── Récolte ──────────────────────────────────────────────────────────────────
 
-// Entrée du plan de culture non encore récoltée pour cette section
+// En mode plantation (slot disponible cliqué), on n'expose jamais de culture récoltable.
+// En mode récolte (barre occupée cliquée), on cherche la culture active.
 const harvestableEntry = computed(() => {
   if (!store.openSection) return null;
+  if (store.openSection.plantingMode) return null;
+  const { harvestSectionId } = store.openSection;
+  if (harvestSectionId !== undefined) {
+    return store.culturePlan.find((e) => e.sectionId === harvestSectionId) ?? null;
+  }
   const { boardId, sectionNumber } = store.openSection;
   return (
     store.culturePlan.find(
@@ -701,6 +913,28 @@ async function confirmHarvest() {
   }
 }
 
+// ── Annulation de culture ─────────────────────────────────────────────────────
+
+const cancelError = ref<string | null>(null);
+const cancelLoading = ref(false);
+const cancelConfirming = ref(false);
+
+async function cancelSection() {
+  if (!harvestableEntry.value) return;
+  cancelLoading.value = true;
+  cancelError.value = null;
+  try {
+    await rotationsApi.cancelSection(harvestableEntry.value.sectionId);
+    await store.loadCulturePlan();
+    store.closeSectionPanel();
+  } catch {
+    cancelError.value = 'Impossible d\'annuler cette culture.';
+    cancelConfirming.value = false;
+  } finally {
+    cancelLoading.value = false;
+  }
+}
+
 // ── Arrosage ─────────────────────────────────────────────────────────────────
 
 function nowLocalDatetime(): string {
@@ -732,6 +966,68 @@ async function doWater() {
   }
 }
 
+// ── Fertilisation ────────────────────────────────────────────────────────────
+
+const fertilScope = ref<'board' | 'sole'>('board');
+const fertilCatalogueId = ref<number | ''>('');
+const fertilDate = ref(todayIso);
+const fertilQty = ref<number | undefined>(undefined);
+const fertilUnit = ref('kg');
+const fertilDesc = ref('');
+
+async function doFertil() {
+  if (!store.openSection || !fertilCatalogueId.value) return;
+  const date = fertilDate.value;
+  const catalogueId = Number(fertilCatalogueId.value);
+  const payload = {
+    date,
+    catalogueId,
+    quantity: fertilQty.value,
+    unit: fertilUnit.value,
+    description: fertilDesc.value || undefined,
+  };
+  if (fertilScope.value === 'board') {
+    await amendementStore.applyToBoard({ ...payload, boardId: store.openSection.boardId });
+  } else if (fertilScope.value === 'sole' && currentSole.value) {
+    await amendementStore.applyToSole({ ...payload, soleId: currentSole.value.id_sole });
+  }
+  if (!amendementStore.submitError) {
+    fertilDesc.value = '';
+    fertilQty.value = undefined;
+  }
+}
+
+// ── Traitement ───────────────────────────────────────────────────────────────
+
+const treatScope = ref<'board' | 'sole'>('board');
+const treatCatalogueId = ref<number | ''>('');
+const treatDate = ref(todayIso);
+const treatQty = ref<number | undefined>(undefined);
+const treatUnit = ref('L');
+const treatDesc = ref('');
+
+async function doTreat() {
+  if (!store.openSection || !treatCatalogueId.value) return;
+  const date = treatDate.value;
+  const catalogueId = Number(treatCatalogueId.value);
+  const payload = {
+    date,
+    catalogueId,
+    quantity: treatQty.value,
+    unit: treatUnit.value,
+    description: treatDesc.value || undefined,
+  };
+  if (treatScope.value === 'board') {
+    await treatmentStore.applyToBoard({ ...payload, boardId: store.openSection.boardId });
+  } else if (treatScope.value === 'sole' && currentSole.value) {
+    await treatmentStore.applyToSole({ ...payload, soleId: currentSole.value.id_sole });
+  }
+  if (!treatmentStore.submitError) {
+    treatDesc.value = '';
+    treatQty.value = undefined;
+  }
+}
+
 function formatDatetime(dateStr: string): string {
   return new Date(dateStr).toLocaleString('fr-FR', {
     day: '2-digit',
@@ -751,8 +1047,14 @@ function formatDate(dateStr: string | null | undefined): string {
   });
 }
 
-function confirm(bypass: boolean) {
-  store.submitAssignment(bypass);
+const plantingSuccess = ref(false);
+
+async function confirm(bypass: boolean) {
+  const ok = await store.submitAssignment(bypass);
+  if (ok) {
+    plantingSuccess.value = true;
+    setTimeout(() => store.closeSectionPanel(), 2000);
+  }
 }
 </script>
 
@@ -879,6 +1181,12 @@ function confirm(bypass: boolean) {
   background: rgba(200, 130, 30, 0.12);
   color: #a05a10;
   border: 1px solid rgba(200, 130, 30, 0.25);
+}
+
+.section-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 /* Toggle button for restricted section */
@@ -1035,9 +1343,89 @@ function confirm(bypass: boolean) {
 }
 
 .veg-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.veg-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.veg-item .veg-btn {
+  width: 100%;
+  border-radius: 10px;
+}
+
+.veg-item .veg-btn.selected {
+  border-radius: 10px 10px 0 0;
+  border-bottom-color: transparent;
+}
+
+.veg-varieties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem 0.6rem;
+  background: rgba(74, 103, 65, 0.06);
+  border: 1px solid rgba(74, 103, 65, 0.18);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  align-items: center;
+}
+
+.variety-chip {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(74, 103, 65, 0.22);
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--brand-deep);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+
+.variety-chip:hover {
+  background: rgba(74, 103, 65, 0.1);
+  border-color: rgba(74, 103, 65, 0.4);
+}
+
+.variety-chip-selected {
+  background: rgba(74, 103, 65, 0.18);
+  border-color: rgba(74, 103, 65, 0.5);
+  color: #2d5a27;
+}
+
+.variety-chip-custom {
+  border-style: dashed;
+  color: rgba(39, 65, 53, 0.6);
+}
+
+.varieties-loading,
+.varieties-none {
+  font-size: 0.76rem;
+  color: rgba(39, 65, 53, 0.5);
+  font-style: italic;
+}
+
+.variety-custom-inline {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(74, 103, 65, 0.25);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--brand-deep);
+  outline: none;
+}
+
+.variety-custom-inline:focus {
+  border-color: rgba(74, 103, 65, 0.5);
 }
 
 .veg-btn {
@@ -1111,6 +1499,19 @@ function confirm(bypass: boolean) {
 .veg-badge-date {
   font-size: 0.65rem;
   color: rgba(39, 65, 53, 0.68);
+}
+
+.veg-btn-assoc-warn {
+  border-color: rgba(180, 120, 0, 0.35);
+  background: rgba(255, 200, 50, 0.06);
+}
+.veg-btn-assoc-warn:hover {
+  background: rgba(255, 200, 50, 0.14);
+}
+
+.veg-badge-assoc {
+  font-size: 0.75rem;
+  color: #b47800;
 }
 
 /* ── Search ──────────────────────────────────────────────────────────────── */
@@ -1281,6 +1682,17 @@ function confirm(bypass: boolean) {
   margin-top: 0.5rem;
 }
 
+.variety-selected-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background: rgba(74, 103, 65, 0.12);
+  border: 1.5px solid rgba(74, 103, 65, 0.3);
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #2d5a27;
+}
+
 .variety-loading {
   font-size: 0.84rem;
   color: rgba(39, 65, 53, 0.45);
@@ -1319,6 +1731,32 @@ function confirm(bypass: boolean) {
 }
 
 .form-field input:focus-visible {
+  outline: 2px solid rgba(74, 103, 65, 0.24);
+  outline-offset: 2px;
+}
+
+.qty-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.qty-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.qty-unit {
+  padding: 0.95rem 0.75rem;
+  border: 1px solid rgba(39, 65, 53, 0.14);
+  border-radius: 16px;
+  font-size: 0.95rem;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.qty-unit:focus-visible {
   outline: 2px solid rgba(74, 103, 65, 0.24);
   outline-offset: 2px;
 }
@@ -1387,6 +1825,74 @@ function confirm(bypass: boolean) {
   color: #c62828;
 }
 
+.cancel-section-block {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed rgba(181, 106, 67, 0.3);
+}
+
+.cancel-section-btn {
+  width: 100%;
+  padding: 0.55rem 1rem;
+  border: 1px solid rgba(181, 106, 67, 0.5);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: #8b4d2d;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.cancel-section-btn:hover:not(:disabled) {
+  background: rgba(181, 106, 67, 0.1);
+  border-color: rgba(181, 106, 67, 0.8);
+}
+
+.cancel-section-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-confirm-text {
+  margin: 0 0 0.6rem;
+  font-size: 0.84rem;
+  color: #8b4d2d;
+  line-height: 1.4;
+}
+
+.cancel-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.cancel-confirm-actions .cancel-section-btn {
+  flex: 1;
+}
+
+.cancel-confirm-abort {
+  flex: 1;
+  padding: 0.55rem 1rem;
+  border: 1px solid rgba(39, 65, 53, 0.18);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--brand-deep);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.cancel-confirm-abort:hover {
+  background: rgba(39, 65, 53, 0.07);
+}
+
+.cancel-error {
+  margin: 0 0 0.5rem;
+  font-size: 0.84rem;
+  color: #c62828;
+}
+
 .panel-harvest-block {
   margin: 0;
   padding: 0.65rem 0.9rem;
@@ -1396,6 +1902,44 @@ function confirm(bypass: boolean) {
   color: #92400e;
   font-size: 0.84rem;
   line-height: 1.45;
+}
+
+/* ── Succès plantation ───────────────────────────────────────────────────── */
+.planting-success-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin: 0 1rem 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(74, 140, 65, 0.14), rgba(39, 100, 53, 0.08));
+  border: 1.5px solid rgba(74, 140, 65, 0.3);
+  animation: slide-in-success 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slide-in-success {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.success-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.planting-success-banner strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #1e5c2a;
+  margin-bottom: 0.2rem;
+}
+
+.planting-success-banner p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: rgba(30, 92, 42, 0.75);
 }
 
 /* Footer */
@@ -1456,6 +2000,116 @@ function confirm(bypass: boolean) {
 }
 
 .secondary-button:hover { transform: translateY(-1px); }
+
+/* ── Fertilisation ───────────────────────────────────────────────────────── */
+.panel-section-fertil {
+  border-color: rgba(74, 130, 60, 0.25);
+  background: rgba(235, 248, 233, 0.78);
+}
+
+.fertil-header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+}
+
+.fertil-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.fertil-header h4 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #2d6a1e;
+}
+
+.scope-name-fertil {
+  color: #2d6a1e;
+}
+
+.fertil-btn {
+  width: 100%;
+  margin-top: 0.85rem;
+  padding: 0.7rem 1.2rem;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #3a8030, #256020);
+  color: #e8f8e2;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: opacity 160ms, transform 160ms;
+}
+
+.fertil-btn:hover:not(:disabled) {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.fertil-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Traitement ──────────────────────────────────────────────────────────── */
+.panel-section-treat {
+  border-color: rgba(130, 60, 160, 0.22);
+  background: rgba(248, 238, 255, 0.78);
+}
+
+.treat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+}
+
+.treat-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.treat-header h4 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #6a2090;
+}
+
+.scope-name-treat {
+  color: #6a2090;
+}
+
+.treat-btn {
+  width: 100%;
+  margin-top: 0.85rem;
+  padding: 0.7rem 1.2rem;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #7a28a8, #5c1a88);
+  color: #f5e8ff;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: opacity 160ms, transform 160ms;
+}
+
+.treat-btn:hover:not(:disabled) {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.treat-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* ── Arrosage ────────────────────────────────────────────────────────────── */
 .panel-section-water {

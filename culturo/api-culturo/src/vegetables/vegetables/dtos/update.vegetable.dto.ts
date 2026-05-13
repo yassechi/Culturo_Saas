@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class UpdateVegetableDTO {
   @IsNumber()
@@ -50,4 +50,10 @@ export class UpdateVegetableDTO {
   @IsOptional()
   @ApiProperty({ description: 'The ID of Family' })
   id_family?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['faible', 'moyen', 'fort'])
+  @ApiProperty({ description: 'Besoin en azote', enum: ['faible', 'moyen', 'fort'] })
+  nitrogen_need?: 'faible' | 'moyen' | 'fort';
 }

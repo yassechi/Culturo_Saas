@@ -343,9 +343,27 @@ onMounted(() => store.loadHarvests());
 /* Table */
 .table-wrapper {
   border-radius: 20px;
-  overflow: hidden;
+  overflow-x: auto;
   border: 1px solid rgba(39, 65, 53, 0.08);
   box-shadow: var(--shadow-soft);
+}
+
+@media (max-width: 640px) {
+  .harvest-view { padding: 0 0.75rem 1.5rem; }
+
+  /* Colonnes masquées sur mobile : Variété(3), Exploitation(4), Sole(5), Déclaré par(9) */
+  .harvest-table th:nth-child(3),
+  .harvest-table td:nth-child(3),
+  .harvest-table th:nth-child(4),
+  .harvest-table td:nth-child(4),
+  .harvest-table th:nth-child(5),
+  .harvest-table td:nth-child(5),
+  .harvest-table th:nth-child(9),
+  .harvest-table td:nth-child(9) {
+    display: none;
+  }
+
+  .filter-group { min-width: 0; flex: 1 1 140px; }
 }
 
 .harvest-table {

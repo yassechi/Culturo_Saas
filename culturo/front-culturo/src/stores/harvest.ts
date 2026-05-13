@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { harvestsApi } from '@/api/harvests';
+import { usePlanningStore } from '@/stores/planning';
 
 export interface HarvestRecord {
   id_harvest: number;
@@ -32,13 +33,16 @@ export const useHarvestStore = defineStore('harvest', () => {
   const harvests = ref<HarvestRecord[]>([]);
   const listLoading = ref(false);
   const listError = ref<string | null>(null);
+  const listLoaded = ref(false);
 
   async function loadHarvests() {
+    if (listLoaded.value && !listError.value) return;
     listLoading.value = true;
     listError.value = null;
     try {
       const res = await harvestsApi.findAll();
       harvests.value = res.data as HarvestRecord[];
+      listLoaded.value = true;
     } catch (err: unknown) {
       listError.value = 'Impossible de charger l\'historique des récoltes.';
     } finally {
@@ -49,6 +53,8 @@ export const useHarvestStore = defineStore('harvest', () => {
   async function deleteHarvest(id: number) {
     await harvestsApi.remove(id);
     harvests.value = harvests.value.filter((h) => h.id_harvest !== id);
+    listLoaded.value = false;
+    void usePlanningStore().loadCulturePlan();
   }
 
   async function createHarvest(payload: {
@@ -68,9 +74,15 @@ export const useHarvestStore = defineStore('harvest', () => {
         quantity_unit: payload.unit,
         userId: payload.userId,
       });
+      listLoaded.value = false;
+      void usePlanningStore().loadCulturePlan();
     } catch (err: unknown) {
-      error.value =
-        err instanceof Error ? err.message : 'Erreur lors de la déclaration de la récolte.';
+      const axiosMsg = (err as any)?.response?.data?.message;
+      error.value = axiosMsg
+        ? String(axiosMsg)
+        : err instanceof Error
+          ? err.message
+          : 'Erreur lors de la déclaration de la récolte.';
       throw err;
     } finally {
       loading.value = false;

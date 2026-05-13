@@ -34,6 +34,9 @@ export class Vegetable {
   @Column()
   estimated_yield: number;
 
+  @Column({ type: 'varchar', length: 10, default: 'moyen', nullable: true })
+  nitrogen_need: 'faible' | 'moyen' | 'fort' | null;
+
   @ManyToOne(() => Family, (family) => family.vegetables)
   family: Family;
 

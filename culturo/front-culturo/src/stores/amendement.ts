@@ -29,34 +29,40 @@ export const useAmendementStore = defineStore('amendement', () => {
   // Catalogue
   const catalogue = ref<CatalogueItem[]>([]);
   const catalogueLoading = ref(false);
+  const catalogueLoaded = ref(false);
 
   // Historique
   const amendements = ref<AmendementRecord[]>([]);
   const listLoading = ref(false);
   const listError = ref<string | null>(null);
+  const listLoaded = ref(false);
 
   // Soumission
   const submitting = ref(false);
   const submitError = ref<string | null>(null);
 
   async function loadCatalogue() {
+    if (catalogueLoaded.value) return;
     catalogueLoading.value = true;
     try {
       const res = await amendementsApi.findAllCatalogue();
       catalogue.value = res.data as CatalogueItem[];
+      catalogueLoaded.value = true;
     } finally {
       catalogueLoading.value = false;
     }
   }
 
   async function loadAll() {
+    if (listLoaded.value && !listError.value) return;
     listLoading.value = true;
     listError.value = null;
     try {
       const res = await amendementsApi.findAll();
       amendements.value = res.data as AmendementRecord[];
+      listLoaded.value = true;
     } catch {
-      listError.value = 'Impossible de charger l\'historique des amendements.';
+      listError.value = 'Impossible de charger l\'historique des fertilisations.';
     } finally {
       listLoading.value = false;
     }
@@ -81,8 +87,9 @@ export const useAmendementStore = defineStore('amendement', () => {
         quantity_unit: payload.unit,
         description: payload.description,
       });
+      listLoaded.value = false;
     } catch {
-      submitError.value = 'Erreur lors de l\'enregistrement de l\'amendement.';
+      submitError.value = 'Erreur lors de l\'enregistrement de la fertilisation.';
       throw new Error(submitError.value);
     } finally {
       submitting.value = false;
@@ -108,8 +115,9 @@ export const useAmendementStore = defineStore('amendement', () => {
         quantity_unit: payload.unit,
         description: payload.description,
       });
+      listLoaded.value = false;
     } catch {
-      submitError.value = 'Erreur lors de l\'amendement en masse.';
+      submitError.value = 'Erreur lors de la fertilisation en masse.';
       throw new Error(submitError.value);
     } finally {
       submitting.value = false;
@@ -119,6 +127,7 @@ export const useAmendementStore = defineStore('amendement', () => {
   async function deleteAmendement(id: number) {
     await amendementsApi.remove(id);
     amendements.value = amendements.value.filter((a) => a.id_amended !== id);
+    listLoaded.value = false;
   }
 
   async function createCatalogueItem(name: string, notice?: string) {

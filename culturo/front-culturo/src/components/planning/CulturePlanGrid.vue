@@ -1,20 +1,6 @@
 ﻿<template>
   <div class="timeline-shell">
     <div class="timeline-header">
-      <div class="year-heading">
-        <label for="planning-year">Année</label>
-        <input
-          id="planning-year"
-          type="number"
-          :value="draftYear ?? ''"
-          :min="2000"
-          :max="currentYear + 5"
-          inputmode="numeric"
-          @input="handleYearInput"
-          @change="handleYearInput"
-          @wheel.prevent
-        />
-      </div>
       <div class="board-heading">
         <span>Planche</span>
         <small>{{ store.boardsForSelectedSole.length }} planche(s)</small>
@@ -25,7 +11,7 @@
           class="header-nav-button header-nav-button-left"
           :disabled="!canMoveBackward"
           aria-label="Mois précédents"
-          @click="emit('shift-window', -3)"
+          @click="emit('shift-window', -props.windowStep)"
         >
           <span class="nav-triangle is-left" aria-hidden="true"></span>
         </button>
@@ -50,7 +36,7 @@
           class="header-nav-button header-nav-button-right"
           :disabled="!canMoveForward"
           aria-label="Mois suivants"
-          @click="emit('shift-window', 3)"
+          @click="emit('shift-window', props.windowStep)"
         >
           <span class="nav-triangle is-right" aria-hidden="true"></span>
         </button>
@@ -67,14 +53,14 @@
         class="timeline-board-rail timeline-board-rail-left"
         :disabled="!canMoveBackward"
         aria-label="Mois précédents"
-        @click="emit('shift-window', -3)"
+        @click="emit('shift-window', -props.windowStep)"
       />
       <button
         type="button"
         class="timeline-board-rail timeline-board-rail-right"
         :disabled="!canMoveForward"
         aria-label="Mois suivants"
-        @click="emit('shift-window', 3)"
+        @click="emit('shift-window', props.windowStep)"
       />
 
       <div class="timeline-list">
@@ -110,13 +96,10 @@
 
                 <!-- Slot disponible normal -->
                 <button
-                  v-if="lane.status === 'available' && !isWindowPast && !(lane as AvailableLane).blocked"
+                  v-if="lane.status === 'available' && !isWindowPast && !isWindowFuture && !(lane as AvailableLane).blocked"
                   type="button"
                   class="lane-slot"
-                  :class="{ 'is-today-anchored': isCurrentYear && todayInWindow }"
-                  :style="isCurrentYear && todayInWindow
-                    ? { left: `${todayLeftPct}%`, width: `${100 - todayLeftPct}%` }
-                    : {}"
+                  :style="availableSlotStyle"
                   :disabled="readonly"
                   @click="openSlot(row.board, lane.sectionNumber, (lane as AvailableLane).minStartDate)"
                 >
@@ -154,6 +137,8 @@
                   }"
                   @click="!lane.isHarvested && openOccupied(row.board, lane)"
                   @keydown.enter="!lane.isHarvested && openOccupied(row.board, lane)"
+                  @mousemove="onBarMouseMove($event, lane)"
+                  @mouseleave="onBarMouseLeave()"
                   >
                     <div class="bar-content" :class="`is-${lane.displaySize}`">
                     <span v-if="lane.displaySize !== 'tiny'" class="bar-line">
@@ -171,24 +156,27 @@
                   </div>
 
                   <div class="bar-tooltip" :class="`is-${lane.tooltipPlacement}`" role="tooltip">
-                    <strong>{{ lane.isHarvested ? '🌾 ' : lane.isPastDue ? '⚠ ' : '' }}{{ lane.vegetableName }}{{ lane.varietyName ? ` — ${lane.varietyName}` : '' }}</strong>
-                    <span v-if="lane.isHarvested" class="tooltip-harvested">Récoltée</span>
-                    <span v-if="lane.isPastDue" class="tooltip-pastdue">À récolter — cliquer pour déclarer</span>
+                    <strong>{{ lane.vegetableName }}{{ lane.varietyName ? ` — ${lane.varietyName}` : '' }}</strong>
+                    <span v-if="barCursorDate" class="tooltip-cursor-date">📍 {{ barCursorDate }}</span>
+                    <span v-if="lane.isHarvested" class="tooltip-harvested">Statut : Récoltée</span>
+                    <span v-else-if="lane.isPastDue" class="tooltip-pastdue">Statut : À récolter — cliquer pour déclarer</span>
+                    <span v-else class="tooltip-status-active">Statut : En cours</span>
                     <span>Plantation : {{ formatDate(lane.startDate) }}</span>
                     <span>Fin prévue : {{ formatDate(lane.endDate) }}</span>
                     <span>Durée : {{ lane.durationDays }} jour(s)</span>
-                    <span>Repere : {{ row.board.board_name }} - section {{ lane.sectionNumber }}</span>
-                    <span class="tooltip-hint">{{ lane.windowCoverage }}</span>
-                    <span class="tooltip-suggestion">{{ lane.suggestion }}</span>
+                    <span>Repère : {{ row.board.board_name }} – Section {{ lane.sectionNumber }}</span>
+                    <span>Variété : {{ lane.varietyName ?? '—' }}</span>
+                    <span>Quantité : {{ lane.quantityPlanted > 0 ? `${lane.quantityPlanted} plants` : '—' }}</span>
+                    <span>Famille : {{ lane.familyName ?? '—' }}<template v-if="lane.familyType"> · <em>{{ lane.familyType }}</em></template></span>
                   </div>
                 </div>
 
                 <!-- Slot disponible après la barre (si le légume se termine aujourd'hui) -->
                 <button
-                  v-if="lane.status === 'occupied' && lane.nextSlotLeft !== undefined && !readonly && !isWindowPast"
+                  v-if="lane.status === 'occupied' && lane.nextSlotLeft !== undefined && !readonly && !isWindowPast && !isWindowFuture"
                   type="button"
                   class="lane-slot lane-slot-after"
-                  :style="{ left: `${lane.nextSlotLeft}%`, width: `${lane.nextSlotWidth}%` }"
+                  :style="{ left: `${lane.nextSlotLeft}%`, right: 'auto', width: `${lane.nextSlotWidth}%` }"
                   @click="openSlot(row.board, lane.sectionNumber, lane.nextMinStartDate)"
                 >
                   <span class="slot-title">Disponible</span>
@@ -206,19 +194,19 @@
         type="button"
         class="month-nav"
         :disabled="!canMoveBackward"
-        @click="emit('shift-window', -3)"
+        @click="emit('shift-window', -props.windowStep)"
       >
         <span class="nav-triangle is-left" aria-hidden="true"></span>
-        <span>3 mois</span>
+        <span>{{ windowStep }} mois</span>
       </button>
       <div class="window-chip">{{ windowLabel }}</div>
       <button
         type="button"
         class="month-nav"
         :disabled="!canMoveForward"
-        @click="emit('shift-window', 3)"
+        @click="emit('shift-window', props.windowStep)"
       >
-        <span>3 mois</span>
+        <span>{{ windowStep }} mois</span>
         <span class="nav-triangle is-right" aria-hidden="true"></span>
       </button>
     </div>
@@ -238,6 +226,7 @@ const props = defineProps<{
   windowLabel: string;
   canMoveBackward: boolean;
   canMoveForward: boolean;
+  windowStep: number;
 }>();
 
 const emit = defineEmits<{
@@ -279,6 +268,7 @@ type AvailableLane = {
 
 type OccupiedLane = {
   sectionNumber: number;
+  sectionId: number;
   status: 'occupied';
   isHarvested: boolean;
   isPastDue: boolean;
@@ -291,10 +281,11 @@ type OccupiedLane = {
   endDate: string;
   vegetableName: string;
   varietyName: string | null;
+  familyName: string | null;
+  familyType: string | null;
+  quantityPlanted: number;
   durationDays: number;
   tooltipTitle: string;
-  windowCoverage: string;
-  suggestion: string;
   accent: string;
   accentDark: string;
   isEndingToday: boolean;
@@ -352,6 +343,26 @@ function formatDate(value?: string) {
   });
 }
 
+const barCursorDate = ref<string | null>(null);
+
+function onBarMouseMove(event: MouseEvent, lane: { startDate: string; endDate: string }) {
+  const bar = event.currentTarget as HTMLElement;
+  const rect = bar.getBoundingClientRect();
+  const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const startMs = new Date(lane.startDate).getTime();
+  const endMs = new Date(lane.endDate).getTime();
+  const ms = startMs + fraction * (endMs - startMs);
+  barCursorDate.value = new Date(ms).toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function onBarMouseLeave() {
+  barCursorDate.value = null;
+}
+
 watch(
   () => props.year,
   (value) => {
@@ -384,22 +395,6 @@ function pickPalette(seed: string) {
   return lanePalettes[hashString(seed) % lanePalettes.length];
 }
 
-function getCoverageLabel(clippedStart: boolean, clippedEnd: boolean) {
-  if (clippedStart && clippedEnd) return 'Visible sur toute la fenetre';
-  if (clippedStart) return 'Commence avant la fenetre visible';
-  if (clippedEnd) return 'Se termine apres la fenetre visible';
-  return 'Entierement visible dans la fenetre';
-}
-
-function getSuggestion(durationDays: number, clippedStart: boolean, clippedEnd: boolean) {
-  if (clippedStart || clippedEnd) {
-    return 'Astuce: cette culture deborde de la periode affichee, utile pour lire les chevauchements.';
-  }
-  if (durationDays >= 90) {
-    return 'Astuce: culture longue, pratique pour verifier la rotation sur plusieurs mois.';
-  }
-  return 'Astuce: culture courte, facile a replacer dans une autre fenetre de calendrier.';
-}
 
 const windowStartDate = computed(() =>
   createUtcDate(props.year, props.windowStartMonth, 1),
@@ -410,6 +405,7 @@ const windowEndDate = computed(() =>
 );
 
 const isWindowPast = computed(() => windowEndDate.value.getTime() < todayUtcMs);
+const isWindowFuture = computed(() => windowStartDate.value.getTime() > todayUtcMs);
 const isCurrentYear = computed(() => props.year === new Date().getFullYear());
 
 const todayInWindow = computed(
@@ -506,14 +502,27 @@ const boardRows = computed<TimelineBoardRow[]>(() => {
           )
         : undefined;
 
-      // Entry visible dans la fenêtre courante
-      const entry = planEntries.value.find(
-        (item) =>
-          item.boardId === board.id_board &&
-          item.sectionNumber === sectionNumber &&
-          toUtcDate(item.startDate) <= windowEndDate.value &&
-          toUtcDate(item.endDate) >= windowStartDate.value,
-      );
+      // Entry visible dans la fenêtre courante.
+      // Quand plusieurs cultures chevauchent la fenêtre (ex: une récoltée + une active),
+      // on privilégie celle qui se termine le plus tard (culture active > culture passée).
+      const entry = (() => {
+        const candidates = planEntries.value.filter(
+          (item) =>
+            item.boardId === board.id_board &&
+            item.sectionNumber === sectionNumber &&
+            toUtcDate(item.startDate) <= windowEndDate.value &&
+            toUtcDate(item.endDate) >= windowStartDate.value,
+        );
+        if (!candidates.length) return undefined;
+        return candidates.sort((a, b) => {
+          const aMs = toUtcDate(a.endDate).getTime();
+          const bMs = toUtcDate(b.endDate).getTime();
+          // Les entrées encore actives (fin >= aujourd'hui) passent en premier
+          if (aMs >= todayUtcMs && bMs < todayUtcMs) return -1;
+          if (aMs < todayUtcMs && bMs >= todayUtcMs) return 1;
+          return bMs - aMs;
+        })[0];
+      })();
 
       if (!entry) {
         if (blockingEntry) {
@@ -574,6 +583,7 @@ const boardRows = computed<TimelineBoardRow[]>(() => {
 
       return {
         sectionNumber,
+        sectionId: entry.sectionId,
         status: 'occupied',
         isHarvested: entry.isHarvested ?? false,
         isPastDue,
@@ -590,6 +600,9 @@ const boardRows = computed<TimelineBoardRow[]>(() => {
         endDate: entry.endDate,
         vegetableName: entry.vegetableName,
         varietyName: entry.varietyName ?? null,
+        familyName: entry.familyName ?? null,
+        familyType: entry.familyType ?? null,
+        quantityPlanted: entry.quantityPlanted ?? 0,
         durationDays,
         tooltipTitle: [
           entry.vegetableName + (entry.varietyName ? ` — ${entry.varietyName}` : ''),
@@ -597,10 +610,6 @@ const boardRows = computed<TimelineBoardRow[]>(() => {
           `Section ${sectionNumber}`,
           isPastDue ? '⚠ À récolter' : `Du ${formatDate(entry.startDate)} au ${formatDate(entry.endDate)}`,
         ].join(' - '),
-        windowCoverage: getCoverageLabel(clippedStart, clippedEnd),
-        suggestion: isPastDue
-          ? 'Cette culture est terminée. Déclarez la récolte pour libérer la section.'
-          : getSuggestion(durationDays, clippedStart, clippedEnd),
         accent: isPastDue ? '#b45309' : palette.base,
         accentDark: isPastDue ? '#92400e' : palette.dark,
         isEndingToday,
@@ -634,22 +643,42 @@ function overlapsWindow(entry: CulturePlanEntry) {
   return entryStart <= windowEndDate.value && entryEnd >= windowStartDate.value;
 }
 
+// Style du slot disponible : ancré à aujourd'hui dans le trimestre courant,
+// pleine largeur sinon.
+const availableSlotStyle = computed(() => {
+  if (isCurrentYear.value && todayInWindow.value && todayLeftPct.value > 0) {
+    return {
+      left: `${todayLeftPct.value}%`,
+      right: 'auto',
+      width: `${100 - todayLeftPct.value}%`,
+    };
+  }
+  return { left: '6px', right: '6px', width: 'auto' };
+});
+
 function openSlot(board: BoardSummary, sectionNumber: number, minStartDate?: string) {
   if (readonly.value) return;
   const windowStr = windowStartDate.value.toISOString().slice(0, 10);
   const rawStart = minStartDate ?? windowStr;
   const defaultStart = rawStart < todayIso ? todayIso : rawStart;
-  store.openSectionPanel(board.id_board, board.board_name, sectionNumber, {
-    startDate: defaultStart,
-    endDate: windowEndDate.value.toISOString().slice(0, 10),
-  });
+  store.openSectionPanel(
+    board.id_board,
+    board.board_name,
+    sectionNumber,
+    { startDate: defaultStart, endDate: windowEndDate.value.toISOString().slice(0, 10) },
+    true, // plantingMode
+  );
 }
 
 function openOccupied(board: BoardSummary, lane: OccupiedLane) {
-  store.openSectionPanel(board.id_board, board.board_name, lane.sectionNumber, {
-    startDate: todayIso,
-    endDate: windowEndDate.value.toISOString().slice(0, 10),
-  });
+  store.openSectionPanel(
+    board.id_board,
+    board.board_name,
+    lane.sectionNumber,
+    { startDate: todayIso, endDate: windowEndDate.value.toISOString().slice(0, 10) },
+    false, // harvest mode
+    lane.sectionId,
+  );
 }
 </script>
 
@@ -673,11 +702,6 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
   justify-content: center;
   gap: 0.85rem;
   padding: 0.95rem 1rem;
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255, 251, 244, 0.94), rgba(251, 245, 231, 0.88));
-  border: 1px solid rgba(39, 65, 53, 0.08);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(12px);
   z-index: 2;
 }
 
@@ -726,17 +750,19 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
 .timeline-header {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
-  grid-template-areas:
-    'year .'
-    'board months';
+  grid-template-areas: 'board months';
   gap: 1rem;
-  align-items: start;
+  align-items: center;
   position: sticky;
   top: 6.6rem;
   z-index: 2;
-  padding: 0.15rem 1.45rem 0.1rem;
-  background: transparent;
-  backdrop-filter: none;
+  padding: 0.55rem 1.45rem;
+  background:
+    linear-gradient(180deg, rgba(39, 65, 53, 0.98), rgba(22, 35, 29, 0.96)),
+    radial-gradient(circle at top, rgba(244, 228, 193, 0.08), transparent 45%);
+  border-radius: 22px;
+  box-shadow: 0 8px 24px rgba(22, 35, 29, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .header-nav-button {
@@ -799,8 +825,8 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
   gap: 0.2rem;
   padding: 0.8rem 1rem;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(39, 65, 53, 0.08);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .board-heading span {
@@ -808,43 +834,13 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--brand-deep);
+  color: #f8f2e3;
 }
 
 .board-heading small {
-  color: rgba(39, 65, 53, 0.68);
+  color: rgba(248, 242, 227, 0.6);
 }
 
-.year-heading {
-  grid-area: year;
-  display: grid;
-  gap: 0.35rem;
-  align-content: start;
-  padding: 0.8rem 1rem;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(39, 65, 53, 0.08);
-  width: 100%;
-}
-
-.year-heading label {
-  font-size: 0.75rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--brand-deep);
-}
-
-.year-heading input {
-  width: 100%;
-  padding: 0.72rem 0.9rem;
-  border: 1px solid rgba(39, 65, 53, 0.14);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  font-weight: 700;
-  color: var(--text-primary);
-}
 
 .month-heading {
   grid-area: months;
@@ -894,13 +890,13 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
   text-align: center;
   padding: 0.58rem 0.55rem;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(39, 65, 53, 0.08);
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   font-family: var(--font-display);
   font-size: 0.88rem;
   font-weight: 800;
   text-transform: capitalize;
-  color: var(--brand-deep);
+  color: #f8f2e3;
   box-shadow: 0 6px 12px rgba(58, 47, 24, 0.04);
 }
 
@@ -964,11 +960,11 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
 }
 
 .board-row:nth-child(odd) .board-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(250, 246, 237, 0.86));
+  background: linear-gradient(180deg, rgba(39, 65, 53, 0.95), rgba(22, 35, 29, 0.92));
 }
 
 .board-row:nth-child(even) .board-card {
-  background: linear-gradient(180deg, rgba(246, 240, 226, 0.94), rgba(242, 234, 214, 0.9));
+  background: linear-gradient(180deg, rgba(32, 55, 44, 0.97), rgba(18, 30, 24, 0.95));
 }
 
 .board-row:nth-child(even) .lane-track {
@@ -992,22 +988,22 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
   gap: 0.15rem;
   padding: 0.5rem 0.75rem;
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(250, 246, 237, 0.85));
-  border: 1px solid rgba(39, 65, 53, 0.1);
-  box-shadow: 0 10px 24px rgba(58, 47, 24, 0.06);
+  background: linear-gradient(180deg, rgba(39, 65, 53, 0.95), rgba(22, 35, 29, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 20px rgba(22, 35, 29, 0.18);
 }
 
 .board-card h3 {
   margin: 0;
   font-size: 0.85rem;
   font-weight: 700;
-  color: var(--brand-deep);
+  color: #f8f2e3;
 }
 
 .board-card p {
   margin: 0;
   font-size: 0.75rem;
-  color: rgba(39, 65, 53, 0.68);
+  color: rgba(248, 242, 227, 0.6);
 }
 
 .board-track {
@@ -1082,8 +1078,8 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
 }
 
 .lane-slot {
-  inset-inline: 6px;
-  width: calc(100% - 12px);
+  left: 6px;
+  right: 6px;
   border: 1px dashed rgba(74, 103, 65, 0.38);
   background:
     linear-gradient(135deg, rgba(74, 103, 65, 0.08), rgba(244, 228, 193, 0.36)),
@@ -1233,9 +1229,9 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
   letter-spacing: 0.06em;
 }
 
-.lane-slot-after,
-.lane-slot.is-today-anchored {
-  inset-inline: unset;
+.lane-slot-after {
+  left: unset;
+  right: unset;
 }
 
 .lane-bar:hover,
@@ -1403,14 +1399,28 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
   line-height: 1.35;
 }
 
-.tooltip-hint {
-  color: #d9e6d2;
-  margin-top: 0.2rem;
+.tooltip-cursor-date {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.2rem 0.5rem;
+  margin-bottom: 0.1rem;
+  letter-spacing: 0.01em;
 }
 
-.tooltip-suggestion {
-  color: #ffedc7;
-  font-style: italic;
+.tooltip-status-active {
+  display: inline-block;
+  background: rgba(60, 120, 60, 0.18);
+  color: #2d5a27;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .empty-state {
@@ -1434,23 +1444,12 @@ function openOccupied(board: BoardSummary, lane: OccupiedLane) {
   .timeline-header {
     top: 9.2rem;
     grid-template-columns: 1fr;
-    grid-template-areas:
-      'year'
-      'board'
-      'months';
+    grid-template-areas: 'board' 'months';
     gap: 0.75rem;
   }
 
   .board-heading {
     min-width: 0;
-  }
-
-  .year-heading {
-    width: 100%;
-  }
-
-  .year-heading input {
-    width: 100%;
   }
 
   .month-heading {

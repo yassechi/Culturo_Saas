@@ -5,6 +5,8 @@ import { RequiertPermissions } from './decorators/permissions.decorator';
 import { PermissionsGuard } from './guards/permissions.guard';
 import { UpdateUserDTO } from './dtos/update.user.dto';
 import { RegisterDTO } from './dtos/register.user.dto';
+import { ForgotPasswordDTO } from './dtos/forgot-password.dto';
+import { ResetPasswordDTO } from './dtos/reset-password.dto';
 import type { JWTPayloadType } from 'src/utils/types';
 import { User_ } from 'src/entities/user_.entity';
 import { AuthChard } from './guards/auth.guard';
@@ -152,5 +154,30 @@ export class UsersController {
     @CurrentUser() payload: JWTPayloadType,
   ): Promise<User_> {
     return this.userService.getCurrentUser(payload.id);
+  }
+
+  /**
+   * Demande de réinitialisation de mot de passe
+   */
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Envoie un email de réinitialisation de mot de passe' })
+  @ApiResponse({ status: 200, description: 'Email envoyé si le compte existe' })
+  public async forgotPassword(@Body() dto: ForgotPasswordDTO): Promise<{ message: string }> {
+    await this.userService.forgotPassword(dto.email);
+    return { message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.' };
+  }
+
+  /**
+   * Réinitialisation du mot de passe avec le token
+   */
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Réinitialise le mot de passe avec le token reçu par email' })
+  @ApiResponse({ status: 200, description: 'Mot de passe mis à jour' })
+  @ApiResponse({ status: 400, description: 'Token invalide ou expiré' })
+  public async resetPassword(@Body() dto: ResetPasswordDTO): Promise<{ message: string }> {
+    await this.userService.resetPassword(dto.token, dto.newPassword);
+    return { message: 'Mot de passe réinitialisé avec succès.' };
   }
 }

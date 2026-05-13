@@ -1,7 +1,7 @@
 // culturo/front-culturo/src/stores/adminUsers.ts
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
-import { adminApi, type ApiUser, type CreateUserPayload } from '@/api/admin';
+import { adminApi, type ApiUser, type ApiGroup, type CreateUserPayload } from '@/api/admin';
 
 export type RoleName = 'admin' | 'formateur' | 'stagiaire';
 
@@ -206,6 +206,79 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
     }
   }
 
+  // ── Groups (promotions) ───────────────────────────────────────────────────
+  const groups = ref<ApiGroup[]>([]);
+  const groupsLoading = ref(false);
+  const groupForm = ref({ name: '', description: '' });
+  const groupEditId = ref<number | null>(null);
+  const groupError = ref<string | null>(null);
+
+  async function loadGroups() {
+    groupsLoading.value = true;
+    try {
+      const resp = await adminApi.getAllGroups();
+      groups.value = resp.data;
+    } catch {
+      groupError.value = 'Impossible de charger les promotions.';
+    } finally {
+      groupsLoading.value = false;
+    }
+  }
+
+  async function saveGroup() {
+    const name = groupForm.value.name.trim();
+    if (!name) { groupError.value = 'Nom obligatoire.'; return; }
+    groupError.value = null;
+    try {
+      if (groupEditId.value !== null) {
+        const resp = await adminApi.updateGroup(groupEditId.value, name, groupForm.value.description || null);
+        const idx = groups.value.findIndex((g) => g.id === groupEditId.value);
+        if (idx !== -1) groups.value[idx] = resp.data;
+      } else {
+        const resp = await adminApi.createGroup(name, groupForm.value.description || null);
+        groups.value.push(resp.data);
+      }
+      groupForm.value = { name: '', description: '' };
+      groupEditId.value = null;
+    } catch (e: any) {
+      groupError.value = e?.response?.data?.message ?? 'Erreur lors de la sauvegarde.';
+    }
+  }
+
+  function editGroup(g: ApiGroup) {
+    groupEditId.value = g.id;
+    groupForm.value = { name: g.name, description: g.description ?? '' };
+  }
+
+  function cancelGroupEdit() {
+    groupEditId.value = null;
+    groupForm.value = { name: '', description: '' };
+    groupError.value = null;
+  }
+
+  async function deleteGroup(id: number) {
+    try {
+      await adminApi.deleteGroup(id);
+      groups.value = groups.value.filter((g) => g.id !== id);
+      users.value.forEach((u) => { if (u.id_group === id) u.id_group = null; });
+    } catch (e: any) {
+      groupError.value = e?.response?.data?.message ?? 'Erreur lors de la suppression.';
+    }
+  }
+
+  async function assignUserGroup(userId: number, groupId: number | null) {
+    try {
+      await adminApi.assignGroup(userId, groupId);
+      const u = users.value.find((u) => u.id_user === userId);
+      if (u) {
+        u.id_group = groupId;
+        u.group = groupId !== null ? (groups.value.find((g) => g.id === groupId) ?? null) : null;
+      }
+    } catch (e: any) {
+      error.value = e?.response?.data?.message ?? 'Erreur lors de l\'affectation.';
+    }
+  }
+
   return {
     users,
     loading,
@@ -228,5 +301,16 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
     openEditModal,
     closeModal,
     submitModal,
+    groups,
+    groupsLoading,
+    groupForm,
+    groupEditId,
+    groupError,
+    loadGroups,
+    saveGroup,
+    editGroup,
+    cancelGroupEdit,
+    deleteGroup,
+    assignUserGroup,
   };
 });

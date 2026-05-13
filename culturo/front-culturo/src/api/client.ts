@@ -25,7 +25,11 @@ apiClient.interceptors.response.use(
       localStorage.removeItem('culturo_token');
       localStorage.removeItem('culturo_user');
 
-      if (window.location.pathname !== '/login') {
+      // Ne pas rediriger si on est déjà sur une page publique (login, reset, etc.)
+      const publicPaths = ['/login', '/mot-de-passe-oublie', '/reinitialiser-mot-de-passe'];
+      const isPublicPage = publicPaths.some((p) => window.location.pathname.startsWith(p));
+
+      if (!isPublicPage) {
         window.location.assign('/login');
       }
     }

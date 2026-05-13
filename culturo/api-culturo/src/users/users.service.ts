@@ -7,8 +7,10 @@ import { Role } from 'src/entities/role.entity';
 import { JWTPayloadType } from 'src/utils/types';
 import { LoginDTO } from './dtos/login.dto';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import {
   BadRequestException,
   Injectable,
@@ -24,6 +26,7 @@ export class UsersService {
     private readonly roleRepository: Repository<Role>,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -240,12 +243,69 @@ export class UsersService {
   }
 
   /**
+   * Demande de réinitialisation de mot de passe — génère un token et envoie l'email
+   */
+  public async forgotPassword(email: string): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { email } });
+
+    // On ne révèle pas si l'email existe ou non (sécurité)
+    if (!user) return;
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 heure
+
+    user.reset_token = token;
+    user.reset_token_expires = expires;
+    await this.userRepository.save(user);
+
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reinitialiser-mot-de-passe?token=${token}`;
+
+    try {
+      await this.emailService.sendPasswordResetEmail(
+        user.email,
+        user.user_first_name,
+        resetUrl,
+      );
+    } catch (error) {
+      // L'email a échoué mais le token est déjà sauvegardé — on log sans bloquer
+      console.error('[ForgotPassword] Échec envoi email :', error.message);
+      console.error('[ForgotPassword] Lien de reset (debug) :', resetUrl);
+    }
+  }
+
+  /**
+   * Réinitialisation du mot de passe avec le token reçu par email
+   */
+  public async resetPassword(token: string, newPassword: string): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { reset_token: token },
+    });
+
+    if (!user || !user.reset_token_expires) {
+      throw new BadRequestException('Token invalide ou expiré.');
+    }
+
+    if (user.reset_token_expires < new Date()) {
+      throw new BadRequestException('Ce lien de réinitialisation a expiré. Faites une nouvelle demande.');
+    }
+
+    user.hpassword = await bcrypt.hash(newPassword, 10);
+    user.reset_token = null;
+    user.reset_token_expires = null;
+    await this.userRepository.save(user);
+  }
+
+  /**
    * Get Current user connected (Logged)
    * @param id  Id of the user logged
    * @returns the user from the database
    */
   public async getCurrentUser(id: number): Promise<User_> {
-    const user = await this.userRepository.findOneBy({ id_user: id });
+    const user = await this.userRepository.findOne({
+      where: { id_user: id },
+      relations: ['role'],
+    });
     if (!user) throw new NotFoundException('User not found');
     return user;
   }

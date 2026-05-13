@@ -21,6 +21,8 @@ import { Role } from './entities/role.entity';
 import 'reflect-metadata';
 import { Variety } from './entities/variety.entity';
 import { Observation } from './entities/observation.entity';
+import { FamilyIncompatibility } from './entities/family_incompatibility.entity';
+import { UserGroup } from './entities/user_group.entity';
 
 export const AppDataSourceOptions: DataSourceOptions = {
   type: 'postgres',
@@ -51,6 +53,8 @@ export const AppDataSourceOptions: DataSourceOptions = {
     Treatment,
     Variety,
     Observation,
+    FamilyIncompatibility,
+    UserGroup,
   ],
   synchronize: true, // dev uniquement
 };

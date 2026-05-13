@@ -5,5 +5,8 @@ export class PlantableVegetableDto {
   familyName: string;
   importance: string;
   lastPlantedInSection: string | null;
+  lastQuantityPlanted: number | null;
   neverPlantedInSection: boolean;
+  associationWarning: boolean;
+  associationWarningReason: string | null;
 }

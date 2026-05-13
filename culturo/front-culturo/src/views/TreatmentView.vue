@@ -425,7 +425,7 @@ function formatDate(d: string): string {
 .filter-group label { font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(39, 65, 53, 0.6); }
 .filter-group input, .filter-group select { padding: 0.55rem 0.85rem; border: 1px solid rgba(39, 65, 53, 0.14); border-radius: 12px; font-size: 0.88rem; background: rgba(255, 255, 255, 0.95); color: var(--text-primary); }
 .reset-btn { padding: 0.55rem 1rem; border-radius: 12px; border: 1px solid rgba(39, 65, 53, 0.18); background: rgba(255, 255, 255, 0.85); color: var(--brand-deep); font-size: 0.82rem; font-weight: 700; cursor: pointer; align-self: flex-end; }
-.table-wrapper { background: rgba(255, 255, 255, 0.82); border: 1px solid rgba(39, 65, 53, 0.08); border-radius: 22px; overflow: hidden; box-shadow: var(--shadow-soft); }
+.table-wrapper { background: rgba(255, 255, 255, 0.82); border: 1px solid rgba(39, 65, 53, 0.08); border-radius: 22px; overflow-x: auto; box-shadow: var(--shadow-soft); }
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .data-table th { padding: 0.75rem 1rem; text-align: left; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(39, 65, 53, 0.55); background: rgba(39, 65, 53, 0.04); border-bottom: 1px solid rgba(39, 65, 53, 0.08); }
 .data-table td { padding: 0.75rem 1rem; border-bottom: 1px solid rgba(39, 65, 53, 0.06); color: var(--text-primary); }
@@ -496,4 +496,13 @@ function formatDate(d: string): string {
 .icon-btn-danger:hover { background: rgba(220, 38, 38, 0.08); }
 .close-x { width: 30px; height: 30px; border-radius: 999px; border: 1px solid rgba(39, 65, 53, 0.12); background: rgba(39, 65, 53, 0.06); color: var(--brand-deep); font-size: 0.8rem; cursor: pointer; }
 @media (max-width: 720px) { .treatment-view { padding: 1.25rem 1rem; } .form-grid { grid-template-columns: 1fr; } .header-actions { flex-direction: column; width: 100%; } }
+@media (max-width: 640px) {
+  .treatment-view { padding: 0 0.75rem 1.5rem; }
+  .header-actions { flex-direction: column; width: 100%; }
+  /* Masquer : Sole(5), Exploitation(6), Notes(7) */
+  .data-table th:nth-child(5), .data-table td:nth-child(5),
+  .data-table th:nth-child(6), .data-table td:nth-child(6),
+  .data-table th:nth-child(7), .data-table td:nth-child(7) { display: none; }
+  .filter-group { min-width: 0; flex: 1 1 140px; }
+}
 </style>

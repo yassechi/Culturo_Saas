@@ -258,7 +258,7 @@ Sol
 
 ---
 
-## État d'avancement — Audit du 2026-05-11
+## État d'avancement — Audit du 2026-05-12
 
 ### Phases terminées ✅
 
@@ -268,42 +268,34 @@ Sol
 | Phase 2 — Référentiel Botanique | ✅ Complet |
 | Phase 3 — Gestion du Sol et des Planches | ✅ Complet |
 
-### Phase 4 — Moteur de Planification (≈ 60%) 🔶
+### Phase 4 — Moteur de Planification ✅ Complet
 
 **Fait :**
-- Règle 1 (rotation 5 ans) et Règle 2 (cohabitation familles primaires) implémentées dans `rotation.service.ts`
-- Endpoints : `GET /rotations/plan/:soleId`, `POST /rotations/can`, `GET /rotations/plantable-sections`, `GET /rotations/plantable-vegetables`, `POST /rotations/add-vegetable`
-- `PlanningView` avec grille calendrier fenêtre glissante 3 mois
-- `SectionSidePanel` (affectation légume/section) et `VegetableSearchPanel` (recherche inverse)
+- Règle 1 (rotation 5 ans) et Règle 2 (cohabitation familles primaires) — `rotation.service.ts`
+- Règle 3 (associations déconseillées) — entité `FamilyIncompatibility`, endpoints CRUD, flag `associationWarning` dans liste légumes
+- Règle 4 (saisonnalité) — warnings avec message explicite
+- Règle 5 (engrais vert) — champ `nitrogen_need` sur `Vegetable`, warning si culture précédente à fort besoin azote
+- Règle 6 (jachère) — warning si planche en culture ≥ 3 ans consécutifs
+- `PlanningView`, `CulturePlanView`, `SectionSidePanel`, `VegetableSearchPanel`
 
-**À faire :**
-- [ ] **Règle 3** — Détection des associations déconseillées dans une même planche
-- [ ] **Règle 4** — Alerte si plantation hors fenêtre saisonnière du légume
-- [ ] **Règle 5** — Suggestion d'engrais vert après culture à fort besoin en azote
-- [ ] **Règle 6** — Recommandation de jachère après N années d'occupation intensive
-- [ ] `CulturePlanView` — Vue lecture seule simplifiée pour le rôle stagiaire (actuellement `FeaturePlaceholder`)
-
-### Phase 5 — Historique, Observations et Traçabilité (≈ 40%) 🔶
+### Phase 5 — Historique, Observations et Traçabilité ✅ Complet
 
 **Fait :**
-- `HistoryView` — historique multi-années avec filtres exploitation/sole/planche et alertes de rotation
-- Store `history.ts` avec calcul d'alertes côté client
+- `HistoryView` — historique multi-années avec filtres, alertes rotation
+- Export **CSV** et **PDF** (print navigateur) — `exportCsv()` et `exportPdf()`
+- `ObservationsView` — saisie terrain stagiaire (maladie, ravageur, météo, état plante, notes)
+- `StatisticsService` backend — taux d'occupation, alertes rotation, contributeurs
+- `DashboardView` — alimenté avec données réelles
+- `ValidationView` — relecture formateur avec workflow approve/changes_requested
 
-**À faire :**
-- [ ] Entité et endpoint **Observations terrain** côté backend (aucun endpoint dédié ; les entités `Watering`/`Treatment` ne couvrent pas les notes libres stagiaires)
-- [ ] `ObservationsView` — Saisie terrain pour les stagiaires (maladies, ravageurs, notes, état plante) — actuellement `FeaturePlaceholder`
-- [ ] Export **PDF / CSV** de l'historique
-- [ ] `DashboardView` — Enrichir avec stats réelles (taux d'occupation, alertes rotation année suivante)
-- [ ] Module `StatisticsModule` backend — entièrement vide, aucun service ni contrôleur
-
-### Phase 6 — Interface Pédagogique et Gestion des Utilisateurs (≈ 30%) 🔶
+### Phase 6 — Interface Pédagogique et Gestion des Utilisateurs (≈ 60%) 🔶
 
 **Fait :**
-- `AdminUsersView` — CRUD complet des utilisateurs avec gestion des rôles
+- `AdminUsersView` — CRUD utilisateurs + rôles
+- `TrainerDashboardView` — vue synthétique formateur (stats stagiaires, file de validation)
+- `ValidationView` — relecture des observations terrain
+- Mode explicatif pédagogique : `RotationRuleMessage` affiche "Comprendre cette règle →" avec explication naturelle pour chaque règle (1 à 6)
 
 **À faire :**
-- [ ] `TrainerDashboardView` — Vue synthétique formateur (activité stagiaires, validations en attente) — actuellement `FeaturePlaceholder`
-- [ ] `ValidationView` — Interface de validation des saisies terrain par le formateur — actuellement `FeaturePlaceholder`
-- [ ] Mode explicatif pédagogique : afficher en langage naturel pourquoi une culture est bloquée
 - [ ] Notifications in-app (rappels plantation, alertes rotation, validations formateur)
 - [ ] Gestion des groupes / promotions de stagiaires

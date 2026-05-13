@@ -32,6 +32,7 @@ export interface VegetableForm {
   in_row_spacing: number;
   estimated_yield: number;
   id_family: number | null;
+  nitrogen_need: 'faible' | 'moyen' | 'fort';
 }
 
 function emptyVegetableForm(): VegetableForm {
@@ -45,6 +46,7 @@ function emptyVegetableForm(): VegetableForm {
     in_row_spacing: 30,
     estimated_yield: 50,
     id_family: null,
+    nitrogen_need: 'moyen',
   };
 }
 
@@ -56,6 +58,7 @@ export const useBotanicalStore = defineStore('botanical', () => {
   const vegetables = ref<ApiVegetable[]>([]);
   const importances = ref<ApiImportance[]>([]);
   const loading = ref(false);
+  const loaded = ref(false);
   const error = ref<string | null>(null);
 
   // Search / filter
@@ -115,7 +118,8 @@ export const useBotanicalStore = defineStore('botanical', () => {
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
-  async function loadAll() {
+  async function loadAll(force = false) {
+    if (loaded.value && !error.value && !force) return;
     loading.value = true;
     error.value = null;
     try {
@@ -127,6 +131,7 @@ export const useBotanicalStore = defineStore('botanical', () => {
       families.value = fam.data;
       vegetables.value = veg.data;
       importances.value = imp.data;
+      loaded.value = true;
     } catch {
       error.value = 'Impossible de charger le référentiel botanique.';
     } finally {
@@ -229,6 +234,7 @@ export const useBotanicalStore = defineStore('botanical', () => {
       in_row_spacing: v.in_row_spacing,
       estimated_yield: v.estimated_yield,
       id_family: v.family?.id_family ?? null,
+      nitrogen_need: (v.nitrogen_need as 'faible' | 'moyen' | 'fort') ?? 'moyen',
     };
     vegModalError.value = null;
     vegModalOpen.value = true;
@@ -257,6 +263,7 @@ export const useBotanicalStore = defineStore('botanical', () => {
         in_row_spacing: Number(vegForm.value.in_row_spacing),
         estimated_yield: Number(vegForm.value.estimated_yield),
         id_family: vegForm.value.id_family,
+        nitrogen_need: vegForm.value.nitrogen_need,
       };
       if (vegModalMode.value === 'create') {
         const resp = await botanicalApi.createVegetable(payload);
@@ -348,6 +355,7 @@ export const useBotanicalStore = defineStore('botanical', () => {
     vegetables,
     importances,
     loading,
+    loaded,
     error,
     vegSearch,
     vegFamilyFilter,

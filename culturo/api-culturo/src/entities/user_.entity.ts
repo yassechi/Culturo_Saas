@@ -14,6 +14,7 @@ import { Role } from './role.entity';
 import { Harvest } from './harvest.entity';
 import { Order } from './order.entity';
 import { Observation } from './observation.entity';
+import { UserGroup } from './user_group.entity';
 
 @Entity()
 export class User_ {
@@ -71,4 +72,17 @@ export class User_ {
 
   @OneToMany(() => Observation, (observation) => observation.reviewer)
   reviewedObservations: Observation[];
+
+  @Column({ nullable: true, type: 'int' })
+  id_group: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  reset_token: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reset_token_expires: Date | null;
+
+  @ManyToOne(() => UserGroup, (group) => group.users, { nullable: true })
+  @JoinColumn({ name: 'id_group' })
+  group: UserGroup | null;
 }

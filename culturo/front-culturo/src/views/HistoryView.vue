@@ -69,13 +69,22 @@
       </div>
 
       <!-- Export -->
-      <button
-        class="btn-export"
-        :disabled="store.filteredEntries.length === 0"
-        @click="store.exportCsv()"
-      >
-        ↓ Exporter CSV
-      </button>
+      <div class="export-group">
+        <button
+          class="btn-export"
+          :disabled="store.filteredEntries.length === 0"
+          @click="store.exportCsv()"
+        >
+          ↓ CSV
+        </button>
+        <button
+          class="btn-export btn-export-pdf"
+          :disabled="store.filteredEntries.length === 0"
+          @click="store.exportPdf()"
+        >
+          ↓ PDF
+        </button>
+      </div>
     </div>
 
     <!-- Errors -->
@@ -485,6 +494,11 @@ h1 {
 }
 .btn-export:hover { background: rgba(74,103,65,0.08); border-color: rgba(74,103,65,0.3); }
 .btn-export:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-export-pdf { border-color: rgba(180,120,0,0.25); color: #7a5600; }
+.btn-export-pdf:hover { background: rgba(180,120,0,0.08); border-color: rgba(180,120,0,0.4); }
+
+.export-group { display: flex; gap: 0.5rem; align-self: flex-end; }
 
 /* ── Tabs ─────────────────────────────────────────────────────────────────── */
 .tab-bar {

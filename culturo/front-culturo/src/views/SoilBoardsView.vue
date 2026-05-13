@@ -141,9 +141,9 @@
           </span>
           <button
             class="btn-add"
-            title="Nouvelle planche"
+            title="Créer des planches"
             :disabled="!store.selectedSoleId"
-            @click="store.openCreateBoard()"
+            @click="openBatchModal()"
           >+</button>
         </div>
         <div class="panel-list boards-list">
@@ -152,28 +152,98 @@
               v-for="board in store.boardsForSelected"
               :key="board.id_board"
               class="board-card"
-              :class="{ 'board-inactive': !board.board_active }"
+              :class="{ 'board-inactive': !board.board_active, 'board-expanded': expandedBoardId === board.id_board }"
             >
-              <div class="board-top">
-                <span class="board-name">{{ board.board_name }}</span>
-                <div class="board-actions">
-                  <button class="item-edit" title="Modifier" @click="store.openEditBoard(board)">✏️</button>
+              <!-- Clickable header -->
+              <button type="button" class="board-header" @click="toggleBoard(board.id_board)">
+                <div class="board-header-left">
+                  <span class="board-name">{{ board.board_name }}</span>
+                  <span class="board-dim">{{ board.board_width }} × {{ board.board_length }} cm</span>
+                  <span class="status-badge" :class="board.board_active ? 'badge-active' : 'badge-inactive'">
+                    {{ board.board_active ? 'Active' : 'Inactive' }}
+                  </span>
+                </div>
+                <div class="board-header-right">
+                  <span class="board-toggle-arrow">{{ expandedBoardId === board.id_board ? '▲' : '▼' }}</span>
+                  <button class="item-edit" title="Modifier" @click.stop="store.openEditBoard(board)">✏️</button>
                   <button
                     class="item-del"
                     title="Supprimer"
-                    @click="confirmDeleteBoard(board.id_board, board.board_name)"
+                    @click.stop="confirmDeleteBoard(board.id_board, board.board_name)"
                   >🗑️</button>
                 </div>
-              </div>
-              <div class="board-meta">
-                <span class="board-dim">{{ board.board_width }} × {{ board.board_length }} cm</span>
-                <span class="section-count">
-                  {{ (board.sectionPlans as any[])?.length ?? 0 }} plan(s)
-                </span>
-                <span class="status-badge" :class="board.board_active ? 'badge-active' : 'badge-inactive'">
-                  {{ board.board_active ? 'Active' : 'Inactive' }}
-                </span>
-              </div>
+              </button>
+
+              <!-- Expanded sections panel -->
+              <template v-if="expandedBoardId === board.id_board">
+                <!-- Section count control -->
+                <div class="board-sections">
+                  <label class="sections-label">Nombre de sections</label>
+                  <div class="sections-row">
+                    <input
+                      type="number"
+                      class="sections-input"
+                      min="1"
+                      max="20"
+                      :value="boardSectionInputs[board.id_board] ?? getConfig().defaultSectionsPerBoard"
+                      @input="boardSectionInputs[board.id_board] = +($event.target as HTMLInputElement).value"
+                    />
+                    <button
+                      class="btn-sections-apply"
+                      :disabled="store.sectionsLoading[board.id_board]"
+                      @click="applySections(board.id_board)"
+                    >{{ store.sectionsLoading[board.id_board] ? '…' : 'Appliquer' }}</button>
+                  </div>
+                  <p v-if="store.sectionsError[board.id_board]" class="sections-error">
+                    {{ store.sectionsError[board.id_board] }}
+                  </p>
+                  <p v-if="boardSectionSuccess[board.id_board]" class="sections-success">
+                    Sections mises à jour
+                  </p>
+                </div>
+
+                <!-- Sections list -->
+                <div class="board-section-detail">
+                  <div v-if="boardSectionsLoading[board.id_board]" class="section-loading">Chargement…</div>
+                  <template v-else>
+                    <div
+                      v-for="n in (boardSectionCounts[board.id_board] ?? 0)"
+                      :key="n"
+                      class="section-row"
+                    >
+                      <span class="section-num">S{{ n }}</span>
+                      <template v-if="boardSectionsMap[board.id_board]?.find(e => e.sectionNumber === n)">
+                        <span class="section-veg">
+                          {{ boardSectionsMap[board.id_board].find(e => e.sectionNumber === n)!.vegetableName }}
+                          <em v-if="boardSectionsMap[board.id_board].find(e => e.sectionNumber === n)!.varietyName">
+                            — {{ boardSectionsMap[board.id_board].find(e => e.sectionNumber === n)!.varietyName }}
+                          </em>
+                        </span>
+                        <span class="section-dates">
+                          {{ formatSectionDate(boardSectionsMap[board.id_board].find(e => e.sectionNumber === n)!.startDate) }}
+                          → {{ formatSectionDate(boardSectionsMap[board.id_board].find(e => e.sectionNumber === n)!.endDate) }}
+                        </span>
+                        <button
+                          class="section-del"
+                          title="Supprimer la section"
+                          @click="deleteSection(boardSectionsMap[board.id_board].find(e => e.sectionNumber === n)!.sectionId, board.id_board, boardSectionsMap[board.id_board].find(e => e.sectionNumber === n)!.vegetableName)"
+                        >🗑️</button>
+                      </template>
+                      <template v-else>
+                        <span class="section-empty">Disponible</span>
+                        <button
+                          class="section-del"
+                          title="Supprimer la section"
+                          @click="deleteSection(null, board.id_board)"
+                        >🗑️</button>
+                      </template>
+                    </div>
+                    <div v-if="(boardSectionCounts[board.id_board] ?? 0) === 0" class="section-none">
+                      Aucune section configurée. Définissez un nombre ci-dessus.
+                    </div>
+                  </template>
+                </div>
+              </template>
             </div>
             <div v-if="store.boardsForSelected.length === 0" class="panel-empty">
               Aucune planche pour cette sole.
@@ -346,7 +416,91 @@
     </Teleport>
 
     <!-- ════════════════════════════════════════════════════════════════════ -->
-    <!-- MODAL: Planche                                                       -->
+    <!-- MODAL: Création en lot de planches                                  -->
+    <!-- ════════════════════════════════════════════════════════════════════ -->
+    <Teleport to="body">
+      <div v-if="batch.open" class="modal-backdrop" @click.self="closeBatchModal()">
+        <div class="modal modal-batch">
+          <div class="modal-header">
+            <h2>Créer des planches</h2>
+            <button class="modal-close" @click="closeBatchModal()">×</button>
+          </div>
+
+          <div v-if="batch.step === 1" class="modal-body">
+            <p class="batch-hint">Définissez la structure commune à toutes les planches.</p>
+            <div class="form-grid-2">
+              <div class="field-group">
+                <label>Nombre de planches</label>
+                <input v-model.number="batch.count" type="number" min="1" max="50" />
+              </div>
+              <div class="field-group">
+                <label>Sections par planche</label>
+                <input v-model.number="batch.sections" type="number" min="1" max="20" />
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="field-group">
+                <label>Largeur (cm)</label>
+                <input v-model.number="batch.width" type="number" min="1" />
+              </div>
+              <div class="field-group">
+                <label>Longueur (cm)</label>
+                <input v-model.number="batch.length" type="number" min="1" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" @click="closeBatchModal()">Annuler</button>
+              <button
+                class="btn-primary"
+                :disabled="batch.count < 1"
+                @click="batch.step = 2"
+              >Suivant →</button>
+            </div>
+          </div>
+
+          <div v-else class="modal-body">
+            <p class="batch-hint">
+              Choisissez un préfixe — les planches seront numérotées automatiquement.
+            </p>
+            <div class="field-group">
+              <label>Préfixe</label>
+              <input
+                v-model="batch.prefix"
+                placeholder="Ex: N, Nord, S2-"
+                maxlength="12"
+                autofocus
+              />
+            </div>
+            <div v-if="batch.prefix.trim()" class="batch-preview">
+              <span
+                v-for="name in batchPreview"
+                :key="name"
+                class="preview-chip"
+              >{{ name }}</span>
+              <span v-if="batch.count > 8" class="preview-more">
+                … +{{ batch.count - 8 }} autres
+              </span>
+            </div>
+            <div class="batch-summary">
+              <span>{{ batch.count }} planche(s)</span>
+              <span>{{ batch.sections }} section(s) chacune</span>
+              <span>{{ batch.width }} × {{ batch.length }} cm</span>
+            </div>
+            <p v-if="batch.error" class="modal-error">{{ batch.error }}</p>
+            <div class="modal-footer">
+              <button class="btn-secondary" @click="batch.step = 1">← Retour</button>
+              <button
+                class="btn-primary"
+                :disabled="batch.loading || !batch.prefix.trim()"
+                @click="submitBatch()"
+              >{{ batch.loading ? 'Création…' : `Créer ${batch.count} planche(s)` }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- MODAL: Planche (édition uniquement)                                  -->
     <!-- ════════════════════════════════════════════════════════════════════ -->
     <Teleport to="body">
       <div v-if="store.boardModalOpen" class="modal-backdrop" @click.self="store.closeBoardModal()">
@@ -409,9 +563,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useSoilBoardsStore } from '@/stores/soilBoards';
 import { useAuthStore } from '@/stores/auth';
+import { getConfig } from '@/stores/config';
+import { rotationsApi } from '@/api/rotations';
+import { usePlanningStore } from '@/stores/planning';
+import type { CulturePlanEntry } from '@/types/planning';
 import SatelliteMapPicker from '@/components/SatelliteMapPicker.vue';
 import SatelliteFrame from '@/components/SatelliteFrame.vue';
 
@@ -608,6 +766,132 @@ function confirmDeleteSole(id: number, name: string) {
 function confirmDeleteBoard(id: number, name: string) {
   if (confirm(`Supprimer la planche "${name}" ?`)) {
     store.deleteBoard(store.selectedSoleId!, id);
+  }
+}
+
+// ── Batch board creation ──────────────────────────────────────────────────────
+const batch = reactive({
+  open: false,
+  step: 1 as 1 | 2,
+  count: 5,
+  width: 120,
+  length: 500,
+  prefix: '',
+  sections: 3,
+  loading: false,
+  error: null as string | null,
+});
+
+const batchPreview = computed(() => {
+  if (!batch.prefix.trim()) return [];
+  return Array.from({ length: Math.min(batch.count, 8) }, (_, i) => `${batch.prefix.trim()}${i + 1}`);
+});
+
+function openBatchModal() {
+  batch.open = true;
+  batch.step = 1;
+  batch.count = 5;
+  batch.width = 120;
+  batch.length = 500;
+  batch.prefix = '';
+  batch.sections = 3;
+  batch.loading = false;
+  batch.error = null;
+}
+
+function closeBatchModal() {
+  batch.open = false;
+}
+
+async function submitBatch() {
+  if (!store.selectedSoleId) return;
+  const prefix = batch.prefix.trim();
+  if (!prefix) { batch.error = 'Veuillez saisir un préfixe.'; return; }
+  if (batch.count < 1 || batch.count > 50) { batch.error = 'Nombre de planches entre 1 et 50.'; return; }
+  batch.error = null;
+  batch.loading = true;
+  try {
+    await store.batchCreateBoards(
+      store.selectedSoleId,
+      prefix,
+      batch.count,
+      batch.width,
+      batch.length,
+      batch.sections,
+    );
+    closeBatchModal();
+  } catch (e: any) {
+    const raw = e?.response?.data?.message;
+    batch.error = Array.isArray(raw) ? raw.join(' | ') : (raw ?? e?.message ?? 'Erreur inconnue');
+  } finally {
+    batch.loading = false;
+  }
+}
+
+// ── Board expand / sections detail ───────────────────────────────────────────
+const expandedBoardId = ref<number | null>(null);
+const boardSectionsMap = reactive<Record<number, CulturePlanEntry[]>>({});
+const boardSectionsLoading = reactive<Record<number, boolean>>({});
+const boardSectionCounts = reactive<Record<number, number>>({});
+const currentYear = new Date().getFullYear();
+
+function formatSectionDate(d: string) {
+  return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+async function toggleBoard(boardId: number) {
+  if (expandedBoardId.value === boardId) {
+    expandedBoardId.value = null;
+    return;
+  }
+  expandedBoardId.value = boardId;
+  await loadBoardSections(boardId);
+}
+
+async function loadBoardSections(boardId: number) {
+  if (!store.selectedSoleId) return;
+  boardSectionsLoading[boardId] = true;
+  try {
+    const [planResp, cultureResp] = await Promise.all([
+      rotationsApi.createOrGetSectionPlan(boardId),
+      rotationsApi.getCulturePlan(store.selectedSoleId, currentYear),
+    ]);
+    boardSectionCounts[boardId] = planResp.data.sectionPlan.number_of_section;
+    boardSectionsMap[boardId] = cultureResp.data.filter((e) => e.boardId === boardId);
+  } finally {
+    boardSectionsLoading[boardId] = false;
+  }
+}
+
+async function deleteSection(sectionId: number | null, boardId: number, vegetableName?: string) {
+  if (sectionId !== null && vegetableName) {
+    const ok = window.confirm(`Cette section contient "${vegetableName}". Supprimer quand même la section et sa culture ?`);
+    if (!ok) return;
+  }
+  if (sectionId !== null) {
+    await rotationsApi.cancelSection(sectionId);
+    boardSectionsMap[boardId] = (boardSectionsMap[boardId] ?? []).filter((e) => e.sectionId !== sectionId);
+  }
+  const newCount = Math.max(0, (boardSectionCounts[boardId] ?? 1) - 1);
+  await store.setSections(boardId, newCount);
+  boardSectionCounts[boardId] = newCount;
+  boardSectionInputs[boardId] = newCount;
+  void usePlanningStore().loadCulturePlan();
+}
+
+// ── Sections control ─────────────────────────────────────────────────────────
+const boardSectionInputs = reactive<Record<number, number>>({});
+const boardSectionSuccess = reactive<Record<number, boolean>>({});
+
+async function applySections(boardId: number) {
+  const n = boardSectionInputs[boardId] ?? getConfig().defaultSectionsPerBoard;
+  boardSectionSuccess[boardId] = false;
+  try {
+    await store.setSections(boardId, n);
+    boardSectionSuccess[boardId] = true;
+    setTimeout(() => { boardSectionSuccess[boardId] = false; }, 2500);
+  } catch {
+    // error shown via store.sectionsError
   }
 }
 </script>
@@ -865,24 +1149,54 @@ h1 {
 .boards-list { gap: 0.5rem; }
 
 .board-card {
-  padding: 0.8rem 0.9rem;
   border-radius: 14px;
   border: 1px solid rgba(39,65,53,0.1);
   background: rgba(255,255,255,0.7);
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  overflow: hidden;
   transition: border-color 160ms;
 }
 
 .board-card:hover { border-color: rgba(74,103,65,0.2); }
 .board-card.board-inactive { opacity: 0.55; }
+.board-card.board-expanded { border-color: rgba(74,103,65,0.35); }
 
-.board-top {
+.board-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  padding: 0.8rem 0.9rem;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.board-header:hover { background: rgba(74,103,65,0.04); }
+
+.board-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.board-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.board-toggle-arrow {
+  font-size: 0.65rem;
+  color: rgba(39,65,53,0.4);
+  margin-right: 0.2rem;
 }
 
 .board-name {
@@ -891,19 +1205,90 @@ h1 {
   color: var(--text-primary);
 }
 
-.board-actions { display: flex; gap: 0.2rem; }
-
-.board-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
 .board-dim {
   font-size: 0.78rem;
   color: rgba(39,65,53,0.55);
   font-weight: 600;
+}
+
+/* ── Board section detail ─────────────────────────────────────────────────── */
+.board-section-detail {
+  border-top: 1px solid rgba(39,65,53,0.08);
+  padding: 0.5rem 0.9rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.section-loading {
+  font-size: 0.78rem;
+  color: rgba(39,65,53,0.45);
+  padding: 0.3rem 0;
+}
+
+.section-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(39,65,53,0.03);
+  font-size: 0.8rem;
+}
+
+.section-row:hover { background: rgba(39,65,53,0.06); }
+
+.section-num {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(39,65,53,0.5);
+  min-width: 24px;
+}
+
+.section-veg {
+  flex: 1;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.section-veg em {
+  font-style: normal;
+  font-weight: 400;
+  color: rgba(39,65,53,0.6);
+}
+
+.section-dates {
+  font-size: 0.72rem;
+  color: rgba(39,65,53,0.5);
+  white-space: nowrap;
+}
+
+.section-del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  opacity: 0.45;
+  padding: 0.1rem;
+  transition: opacity 120ms;
+  flex-shrink: 0;
+}
+
+.section-del:hover { opacity: 1; }
+
+.section-empty {
+  color: rgba(39,65,53,0.35);
+  font-style: italic;
+  font-size: 0.78rem;
+}
+
+.section-none {
+  font-size: 0.78rem;
+  color: rgba(39,65,53,0.4);
+  font-style: italic;
+  padding: 0.2rem 0;
 }
 
 .section-count {
@@ -926,6 +1311,79 @@ h1 {
 
 .badge-active { background: rgba(74,140,65,0.12); color: #2d6b30; }
 .badge-inactive { background: rgba(100,100,100,0.1); color: rgba(39,65,53,0.5); }
+
+/* ── Board sections control ───────────────────────────────────────────────── */
+.board-sections {
+  padding: 0.5rem 0.9rem 0.6rem;
+  border-top: 1px solid rgba(39,65,53,0.07);
+}
+
+.sections-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(39,65,53,0.5);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+
+.sections-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.sections-input {
+  width: 56px;
+  padding: 0.28rem 0.4rem;
+  border-radius: 8px;
+  border: 1.5px solid rgba(74,103,65,0.2);
+  background: rgba(255,255,255,0.8);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.sections-input:focus {
+  outline: none;
+  border-color: rgba(74,103,65,0.5);
+}
+
+.btn-sections-apply {
+  padding: 0.28rem 0.7rem;
+  border-radius: 8px;
+  border: 1.5px solid rgba(74,103,65,0.3);
+  background: rgba(74,103,65,0.08);
+  color: rgba(39,65,53,0.85);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms;
+}
+
+.btn-sections-apply:hover:not(:disabled) {
+  background: rgba(74,103,65,0.15);
+}
+
+.btn-sections-apply:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.sections-error {
+  margin: 0.3rem 0 0;
+  font-size: 0.73rem;
+  color: #c0392b;
+}
+
+.sections-success {
+  margin: 0.3rem 0 0;
+  font-size: 0.73rem;
+  color: #2d6b30;
+  font-weight: 600;
+}
 
 /* ── States ───────────────────────────────────────────────────────────────── */
 .global-error {
@@ -977,6 +1435,59 @@ h1 {
 }
 
 .modal-exp { max-width: 580px; }
+.modal-batch { max-width: 520px; }
+
+.batch-hint {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(39, 65, 53, 0.65);
+  line-height: 1.5;
+}
+
+.batch-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  background: rgba(39, 65, 53, 0.04);
+  border-radius: 12px;
+  border: 1px dashed rgba(39, 65, 53, 0.15);
+  min-height: 2.5rem;
+  align-items: center;
+}
+
+.preview-chip {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  background: rgba(74, 140, 65, 0.12);
+  border: 1px solid rgba(74, 140, 65, 0.25);
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #2d6b30;
+}
+
+.preview-more {
+  font-size: 0.8rem;
+  color: rgba(39, 65, 53, 0.5);
+  font-style: italic;
+}
+
+.batch-summary {
+  display: flex;
+  gap: 1rem;
+  padding: 0.6rem 0.85rem;
+  background: rgba(39, 65, 53, 0.05);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(39, 65, 53, 0.75);
+}
+
+.batch-summary span::before {
+  content: '• ';
+  color: rgba(74, 140, 65, 0.6);
+}
 
 /* ── Locality autocomplete ────────────────────────────────────────────────── */
 .locality-field,

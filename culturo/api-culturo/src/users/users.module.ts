@@ -4,7 +4,10 @@ import { User_ } from 'src/entities/user_.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Role } from 'src/entities/role.entity';
 import { UsersService } from './users.service';
-import { ConfigService } from '@nestjs/config';
+import { GroupsService } from './groups.service';
+import { GroupsController } from './groups.controller';
+import { UserGroup } from 'src/entities/user_group.entity';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { EmailModule } from 'src/email/email.module';
@@ -13,7 +16,8 @@ import { PermissionsGuard } from './guards/permissions.guard';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User_, Role]),
+    TypeOrmModule.forFeature([User_, Role, UserGroup]),
+    ConfigModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
@@ -28,8 +32,8 @@ import { PermissionsGuard } from './guards/permissions.guard';
     }),
     EmailModule,
   ],
-  providers: [UsersService, AuthChard, PermissionsGuard],
-  controllers: [UsersController],
-  exports: [UsersService, AuthChard, PermissionsGuard, JwtModule], // Ajoutez JwtModule
+  providers: [UsersService, GroupsService, AuthChard, PermissionsGuard],
+  controllers: [UsersController, GroupsController],
+  exports: [UsersService, GroupsService, AuthChard, PermissionsGuard, JwtModule],
 })
 export class UsersModule {}

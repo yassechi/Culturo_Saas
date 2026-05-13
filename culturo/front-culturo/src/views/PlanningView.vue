@@ -2,7 +2,7 @@
   <div class="planning-view">
     <section class="planning-hero">
       <div class="planning-hero-copy">
-        <p class="planning-hero-eyebrow">Phase 4</p>
+        <p class="planning-hero-eyebrow">Planification</p>
         <h2>Planification des cultures</h2>
         <p class="planning-hero-text">
           Parcourez le calendrier par tranche de 3 mois, comparez les planches occupées
@@ -43,8 +43,9 @@
       <p>Sélectionnez une exploitation et une sole pour afficher le plan de culture.</p>
     </div>
 
-    <div v-else class="plan-content">
-      <div v-if="store.planLoading" class="loading-state">
+    <div ref="planContentRef" v-else class="plan-content">
+      <!-- Chargement initial uniquement (aucune planche encore visible) -->
+      <div v-if="store.planLoading && store.boardsForSelectedSole.length === 0" class="loading-state">
         <p>Chargement du plan de culture...</p>
       </div>
       <div v-else-if="store.planError" class="error-state">
@@ -55,18 +56,45 @@
       </div>
       <template v-else>
         <div class="plan-header">
-          <div>
+          <div class="plan-header-title">
             <p class="plan-eyebrow">Vue calendrier</p>
-            <h2>Plan de culture {{ planningYear }} - {{ store.selectedSole?.sole_name }}</h2>
+            <div class="plan-title-row">
+              <h2>Plan de culture {{ planningYear }} - {{ store.selectedSole?.sole_name }}</h2>
+              <div class="year-inline">
+                <label for="planning-year-view">Année</label>
+                <input
+                  id="planning-year-view"
+                  type="number"
+                  :value="planningYear"
+                  :min="2000"
+                  :max="currentYear + 5"
+                  inputmode="numeric"
+                  @wheel.prevent
+                  @change="onYearInputChange"
+                />
+              </div>
+            </div>
           </div>
-          <span class="plan-meta">
-            {{ store.boardsForSelectedSole.length }} planche(s) - fenêtre {{ visibleWindowLabel }}
-          </span>
+          <div class="plan-header-right">
+            <span v-if="store.planLoading" class="plan-loading-badge">Chargement…</span>
+            <button
+              type="button"
+              class="btn-export-csv"
+              :disabled="store.planLoading || store.culturePlan.length === 0"
+              @click="exportCsv"
+            >
+              ↓ CSV
+            </button>
+            <span class="plan-meta">
+              {{ store.boardsForSelectedSole.length }} planche(s) - fenêtre {{ visibleWindowLabel }}
+            </span>
+          </div>
         </div>
         <CulturePlanGrid
           :year="planningYear"
           :window-start-month="visibleWindowStartMonth"
           :window-label="visibleWindowLabel"
+          :window-step="configStore.config.planningWindowStep"
           :can-move-backward="canMoveBackward"
           :can-move-forward="canMoveForward"
           @shift-window="shiftWindow"
@@ -88,9 +116,12 @@ import SectionSidePanel from '@/components/planning/SectionSidePanel.vue';
 import VegetableSearchPanel from '@/components/planning/VegetableSearchPanel.vue';
 import { useAuthStore } from '@/stores/auth';
 import { usePlanningStore } from '@/stores/planning';
+import { useConfigStore } from '@/stores/config';
 
 const store = usePlanningStore();
 const auth = useAuthStore();
+const configStore = useConfigStore();
+const planContentRef = ref<HTMLElement | null>(null);
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 const planningYear = ref(store.selectedYear);
@@ -158,11 +189,49 @@ async function shiftWindow(delta: number) {
   }
 }
 
+function onYearInputChange(event: Event) {
+  const value = Number((event.target as HTMLInputElement).value);
+  if (Number.isFinite(value) && value >= 2000 && value <= currentYear + 5) {
+    void onYearChange(value);
+  }
+}
+
 async function onYearChange(value: number) {
   if (!Number.isFinite(value) || value < 2000) return;
   planningYear.value = value;
   await store.selectYear(value);
   visibleWindowStartMonth.value = getDefaultWindowStartMonth(value);
+}
+
+function exportCsv() {
+  const sole = store.selectedSole?.sole_name ?? '';
+  const exploitation = store.selectedSole?.exploitation?.exploitation_name ?? '';
+
+  const header = ['Exploitation', 'Sole', 'Planche', 'Section', 'Légume', 'Variété', 'Date début', 'Date fin', 'Statut'];
+
+  const rows = store.culturePlan.map((e) => [
+    exploitation,
+    sole,
+    e.boardName,
+    `S${e.sectionNumber}`,
+    e.vegetableName,
+    e.varietyName ?? '',
+    e.startDate.slice(0, 10),
+    e.endDate.slice(0, 10),
+    e.isHarvested ? 'Récoltée' : 'En cours',
+  ]);
+
+  const csv = [header, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+    .join('\r\n');
+
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `plan-culture-${sole}-${planningYear.value}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 watch(
@@ -181,7 +250,7 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 1.15rem;
-  min-height: 100%;
+  min-height: calc(100vh - 2.5rem);
   height: 100%;
   overflow: hidden;
   padding-bottom: 1rem;
@@ -304,6 +373,7 @@ watch(
   display: grid;
   gap: 1rem;
   margin: 0 1.5rem 1.5rem;
+  background: transparent;
 }
 
 .no-selection,
@@ -329,11 +399,93 @@ watch(
 
 .plan-header {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 0 0.25rem;
   flex-wrap: wrap;
+}
+
+.plan-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.plan-title-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.year-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.year-inline label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(39, 65, 53, 0.6);
+  white-space: nowrap;
+}
+
+.year-inline input {
+  width: 5.5rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(39, 65, 53, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--brand-deep);
+}
+
+.plan-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.btn-export-csv {
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(39, 65, 53, 0.22);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--brand-deep);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms, border-color 140ms;
+}
+
+.btn-export-csv:hover:not(:disabled) {
+  background: rgba(74, 103, 65, 0.1);
+  border-color: rgba(74, 103, 65, 0.4);
+}
+
+.btn-export-csv:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.plan-loading-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--brand-clay);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(200, 120, 60, 0.1);
+  border: 1px solid rgba(200, 120, 60, 0.25);
+  animation: pulse-opacity 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .plan-eyebrow {

@@ -1,11 +1,8 @@
 <template>
   <section class="auth-card">
     <span class="eyebrow">Culturo SaaS</span>
-    <h1 class="hero-title">Commencer le frontend sans toucher au repo API.</h1>
-    <p>
-      Cette base tourne depuis <code>Culturo_Saas</code> et se branche sur l'API via
-      <code>VITE_API_URL</code>.
-    </p>
+    <h1 class="hero-title">Bienvenue sur Culturo.</h1>
+    <p>Connectez-vous pour accéder à votre espace de gestion maraîchère.</p>
 
     <form class="auth-form" @submit.prevent="handleLogin">
       <div class="field">
@@ -35,11 +32,14 @@
       <button class="primary-button" type="submit" :disabled="loading">
         {{ loading ? 'Connexion...' : 'Se connecter' }}
       </button>
+
+      <RouterLink to="/mot-de-passe-oublie" class="forgot-link">
+        Mot de passe oublié ?
+      </RouterLink>
     </form>
 
     <p class="auth-hint">
-      Le frontend accepte le contrat actuel de l'API existante et reste versionne
-      uniquement dans <code>Culturo_Saas</code>.
+      Accès réservé aux membres de l'exploitation. Contactez votre administrateur en cas de problème de connexion.
     </p>
   </section>
 </template>

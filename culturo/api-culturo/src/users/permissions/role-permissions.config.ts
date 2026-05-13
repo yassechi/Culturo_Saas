@@ -26,6 +26,7 @@ export const PERMISSIONS_PAR_ROLE: Record<string, Permission[]> = {
     Permission.PLANIFIER_CULTURE,
     Permission.BYPASS_ROTATION,
     Permission.CONSULTER_PLAN,
+    Permission.DELETE_SECTION,
     // Observations
     Permission.CONSULTER_OBSERVATIONS,
   ],
@@ -52,14 +53,25 @@ export const PERMISSIONS_PAR_ROLE: Record<string, Permission[]> = {
     Permission.PLANIFIER_CULTURE,
     Permission.BYPASS_ROTATION,
     Permission.CONSULTER_PLAN,
+    Permission.DELETE_SECTION,
     // Observations
     Permission.CONSULTER_OBSERVATIONS,
   ],
 
   stagiaire: [
-    // Consultation du plan de culture uniquement
+    // Exploitations (consultation uniquement — pas de création/modification d'infrastructure)
+    Permission.ACCEDER_TOUTES_EXPLOITATIONS,
+    // Référentiel botanique (gestion complète)
+    Permission.CREER_LEGUME,
+    Permission.MODIFIER_SUPPRIMER_LEGUME,
+    Permission.CREER_FAMILLE_LEGUME,
+    Permission.MODIFIER_SUPPRIMER_FAMILLE_LEGUME,
+    Permission.CREER_VARIETE_LEGUME,
+    Permission.MODIFIER_SUPPRIMER_VARIETE_LEGUME,
+    Permission.MODIFIER_SUPPRIMER_RECOLTE,
+    // Planification (consultation uniquement — pas de création de sections)
     Permission.CONSULTER_PLAN,
-    // Saisie et consultation des observations terrain
+    // Observations terrain
     Permission.SAISIR_OBSERVATION,
     Permission.CONSULTER_OBSERVATIONS,
   ],

@@ -23,6 +23,14 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { IsInt, IsPositive, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class CreateIncompatibilityDto {
+  @IsInt() @IsPositive() @Type(() => Number) familyAId: number;
+  @IsInt() @IsPositive() @Type(() => Number) familyBId: number;
+  @IsOptional() @IsString() reason?: string;
+}
 import { AuthChard } from 'src/users/guards/auth.guard';
 import { PermissionsGuard } from 'src/users/guards/permissions.guard';
 import { RequiertPermissions } from 'src/users/decorators/permissions.decorator';
@@ -124,5 +132,33 @@ export class FamilyController {
   @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission refusée - Réservé aux formateurs' })
   public async delFamily(@Param('id', ParseIntPipe) id: number) {
     return this.familyService.delFamily(id);
+  }
+
+  @Get('incompatibilities')
+  @UseGuards(AuthChard)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Liste toutes les incompatibilités entre familles' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Liste des incompatibilités' })
+  public async getIncompatibilities() {
+    return this.familyService.getAllIncompatibilities();
+  }
+
+  @Post('incompatibilities')
+  @UseGuards(AuthChard, PermissionsGuard)
+  @RequiertPermissions(Permission.MODIFIER_SUPPRIMER_FAMILLE_LEGUME)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Crée une incompatibilité entre deux familles' })
+  public async createIncompatibility(@Body() body: CreateIncompatibilityDto) {
+    return this.familyService.createIncompatibility(body.familyAId, body.familyBId, body.reason ?? null);
+  }
+
+  @Delete('incompatibilities/:id')
+  @UseGuards(AuthChard, PermissionsGuard)
+  @RequiertPermissions(Permission.MODIFIER_SUPPRIMER_FAMILLE_LEGUME)
+  @ApiSecurity('bearer')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Supprime une incompatibilité' })
+  public async deleteIncompatibility(@Param('id', ParseIntPipe) id: number) {
+    return this.familyService.deleteIncompatibility(id);
   }
 }

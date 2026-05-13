@@ -310,7 +310,7 @@ function formatDatetime(dateStr: string): string {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(39, 65, 53, 0.08);
   border-radius: 22px;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: var(--shadow-soft);
 }
 
@@ -464,5 +464,19 @@ function formatDatetime(dateStr: string): string {
   .watering-view { padding: 1.25rem 1rem; }
   .data-table { font-size: 0.8rem; }
   .data-table th, .data-table td { padding: 0.6rem 0.65rem; }
+}
+
+@media (max-width: 640px) {
+  .watering-view { padding: 0 0.75rem 1.5rem; }
+
+  /* Masquer : Sole(5), Exploitation(6) */
+  .data-table th:nth-child(5),
+  .data-table td:nth-child(5),
+  .data-table th:nth-child(6),
+  .data-table td:nth-child(6) {
+    display: none;
+  }
+
+  .filter-group { min-width: 0; flex: 1 1 140px; }
 }
 </style>

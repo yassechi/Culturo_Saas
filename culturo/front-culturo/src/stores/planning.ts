@@ -3,6 +3,8 @@ import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import { exploitationsApi } from '@/api/exploitations';
 import { rotationsApi } from '@/api/rotations';
+import { getConfig } from '@/stores/config';
+import { useHistoryStore } from '@/stores/history';
 import type {
   SoleWithBoards,
   CulturePlanEntry,
@@ -17,7 +19,7 @@ import type {
   BoardSummary,
 } from '@/types/planning';
 
-const SECTIONS_PER_BOARD_DEFAULT = 3;
+function sectionsPerBoardDefault() { return getConfig().defaultSectionsPerBoard; }
 
 function todayIso(): string {
   const d = new Date();
@@ -48,7 +50,7 @@ function makeDefaultForm(
     startDate: defaults?.startDate ?? defaultStart,
     endDate: defaults?.endDate ?? defaultEnd,
     quantityPlanted: 0,
-    unity: 'unité',
+    unity: 'kg',
     varietyIdentifier: '',
     bypass: false,
   };
@@ -62,6 +64,7 @@ export const usePlanningStore = defineStore('planning', () => {
   const selectedYear = ref<number>(new Date().getFullYear());
   const solesLoading = ref(false);
   const solesError = ref<string | null>(null);
+  const solesLoaded = ref(false);
 
   const culturePlan = ref<CulturePlanEntry[]>([]);
   const planLoading = ref(false);
@@ -117,7 +120,7 @@ export const usePlanningStore = defineStore('planning', () => {
         const maxFromPlan = culturePlan.value
           .filter((e) => e.boardId === board.id_board)
           .reduce((max, e) => Math.max(max, e.sectionNumber), 0);
-        result.set(board.id_board, Math.max(maxFromPlan, SECTIONS_PER_BOARD_DEFAULT));
+        result.set(board.id_board, Math.max(maxFromPlan, sectionsPerBoardDefault()));
       }
     }
     return result;
@@ -127,7 +130,7 @@ export const usePlanningStore = defineStore('planning', () => {
     const map = new Map<string, SectionDisplay>();
 
     for (const board of boardsForSelectedSole.value) {
-      const n = boardSectionsCount.value.get(board.id_board) ?? SECTIONS_PER_BOARD_DEFAULT;
+      const n = boardSectionsCount.value.get(board.id_board) ?? sectionsPerBoardDefault();
       for (let k = 1; k <= n; k++) {
         map.set(`${board.id_board}-${k}`, { sectionNumber: k, status: 'available' });
       }
@@ -203,11 +206,13 @@ export const usePlanningStore = defineStore('planning', () => {
 
   // ── Actions ────────────────────────────────────────────────────────────────
   async function loadSoles() {
+    if (solesLoaded.value && !solesError.value) return;
     solesLoading.value = true;
     solesError.value = null;
     try {
       const response = await exploitationsApi.getAllSoles();
       soles.value = response.data;
+      solesLoaded.value = true;
 
       const availableExploitationIds = new Set(
         response.data.map((sole) => sole.exploitation.id_exploitation),
@@ -276,9 +281,11 @@ export const usePlanningStore = defineStore('planning', () => {
     boardName: string,
     sectionNumber: number,
     defaults?: { startDate?: string; endDate?: string; vegetableId?: number },
+    plantingMode = false,
+    harvestSectionId?: number,
   ) {
     plantableVegetablesRequestId += 1;
-    openSection.value = { boardId, boardName, sectionNumber, sectionPlanId: null };
+    openSection.value = { boardId, boardName, sectionNumber, sectionPlanId: null, plantingMode, harvestSectionId };
     plantableVegetables.value = [];
     lastRuleMessage.value = null;
     assignmentForm.value = makeDefaultForm(selectedYear.value, defaults);
@@ -297,7 +304,7 @@ export const usePlanningStore = defineStore('planning', () => {
     const requestId = ++plantableVegetablesRequestId;
     vegetablesLoading.value = true;
     try {
-      const planResp = await rotationsApi.createOrGetSectionPlan(openSection.value.boardId);
+      const planResp = await rotationsApi.createOrGetSectionPlan(openSection.value.boardId, getConfig().defaultSectionsPerBoard);
       if (requestId !== plantableVegetablesRequestId || !openSection.value) return;
 
       openSection.value.sectionPlanId = planResp.data.sectionPlan.id_section_plan;
@@ -364,8 +371,8 @@ export const usePlanningStore = defineStore('planning', () => {
     }
   }
 
-  async function submitAssignment(bypass: boolean) {
-    if (!openSection.value || !assignmentForm.value.vegetableId) return;
+  async function submitAssignment(bypass: boolean): Promise<boolean> {
+    if (!openSection.value || !assignmentForm.value.vegetableId) return false;
     assignmentLoading.value = true;
     lastRuleMessage.value = null;
     try {
@@ -381,7 +388,8 @@ export const usePlanningStore = defineStore('planning', () => {
         bypass,
       });
       await loadCulturePlan();
-      closeSectionPanel();
+      useHistoryStore().invalidateSoles();
+      return true;
     } catch (error: any) {
       const data = error?.response?.data;
       if (data?.warningDetails) {
@@ -396,6 +404,7 @@ export const usePlanningStore = defineStore('planning', () => {
           text: 'Une erreur est survenue. Veuillez réessayer.',
         };
       }
+      return false;
     } finally {
       assignmentLoading.value = false;
     }
@@ -478,6 +487,7 @@ export const usePlanningStore = defineStore('planning', () => {
     vegetableGroups,
     plantableSectionsByBoard,
     // actions
+    invalidateSoles: () => { solesLoaded.value = false; },
     loadSoles,
     loadCulturePlan,
     selectYear,

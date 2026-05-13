@@ -7,6 +7,7 @@ import {
   IsArray,
   ValidateNested,
   IsOptional,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateVarietyDTO } from 'src/vegetables/varieties/dtos/create.vartiety.dto';
@@ -70,6 +71,17 @@ export class CreateVegetableDTO {
   @ApiProperty({ example: 8, description: 'ID de la famille du légume' })
   @IsInt()
   id_family: number;
+
+  @ApiProperty({
+    example: 'moyen',
+    description: 'Besoin en azote du légume',
+    enum: ['faible', 'moyen', 'fort'],
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['faible', 'moyen', 'fort'])
+  nitrogen_need?: 'faible' | 'moyen' | 'fort';
 
   @ApiProperty({
     type: [CreateVarietyDTO],

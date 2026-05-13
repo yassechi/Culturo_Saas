@@ -28,30 +28,36 @@ export interface TreatedRecord {
 export const useTreatmentStore = defineStore('treatment', () => {
   const catalogue = ref<TreatmentCatalogueItem[]>([]);
   const catalogueLoading = ref(false);
+  const catalogueLoaded = ref(false);
 
   const treatments = ref<TreatedRecord[]>([]);
   const listLoading = ref(false);
   const listError = ref<string | null>(null);
+  const listLoaded = ref(false);
 
   const submitting = ref(false);
   const submitError = ref<string | null>(null);
 
   async function loadCatalogue() {
+    if (catalogueLoaded.value) return;
     catalogueLoading.value = true;
     try {
       const res = await treatmentsApi.findAllCatalogue();
       catalogue.value = res.data as TreatmentCatalogueItem[];
+      catalogueLoaded.value = true;
     } finally {
       catalogueLoading.value = false;
     }
   }
 
   async function loadAll() {
+    if (listLoaded.value && !listError.value) return;
     listLoading.value = true;
     listError.value = null;
     try {
       const res = await treatmentsApi.findAll();
       treatments.value = res.data as TreatedRecord[];
+      listLoaded.value = true;
     } catch {
       listError.value = 'Impossible de charger l\'historique des traitements.';
     } finally {
@@ -74,6 +80,7 @@ export const useTreatmentStore = defineStore('treatment', () => {
         treatment_unit: payload.unit,
         description: payload.description,
       });
+      listLoaded.value = false;
     } catch {
       submitError.value = 'Erreur lors de l\'enregistrement du traitement.';
       throw new Error(submitError.value);
@@ -97,6 +104,7 @@ export const useTreatmentStore = defineStore('treatment', () => {
         treatment_unit: payload.unit,
         description: payload.description,
       });
+      listLoaded.value = false;
     } catch {
       submitError.value = 'Erreur lors du traitement en masse.';
       throw new Error(submitError.value);
@@ -108,6 +116,7 @@ export const useTreatmentStore = defineStore('treatment', () => {
   async function deleteTreatment(id: number) {
     await treatmentsApi.remove(id);
     treatments.value = treatments.value.filter((t) => t.id_treated !== id);
+    listLoaded.value = false;
   }
 
   async function createCatalogueItem(name: string, notice?: string) {

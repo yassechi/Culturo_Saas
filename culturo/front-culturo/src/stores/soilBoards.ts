@@ -7,6 +7,9 @@ import {
   type ApiSole,
   type ApiBoard,
 } from '@/api/soilBoards';
+import { rotationsApi } from '@/api/rotations';
+import { usePlanningStore } from '@/stores/planning';
+import { useHistoryStore } from '@/stores/history';
 
 export interface ExploitationCoords {
   lat: number;
@@ -65,6 +68,7 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
   const exploitations = ref<ApiExploitation[]>([]);
   const soles = ref<ApiSole[]>([]);
   const loading = ref(false);
+  const loaded = ref(false);
   const error = ref<string | null>(null);
   const exploitationCoords = ref<Record<number, ExploitationCoords>>(loadAllCoords());
 
@@ -124,7 +128,8 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  async function loadAll() {
+  async function loadAll(force = false) {
+    if (loaded.value && !error.value && !force) return;
     loading.value = true;
     error.value = null;
     try {
@@ -134,6 +139,7 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
       ]);
       exploitations.value = expResp.data;
       soles.value = soleResp.data;
+      loaded.value = true;
     } catch {
       error.value = 'Impossible de charger les données.';
     } finally {
@@ -225,6 +231,15 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
     }
   }
 
+  function syncPlanningStore() {
+    const planningStore = usePlanningStore();
+    planningStore.invalidateSoles();
+    void planningStore.loadSoles();
+    const historyStore = useHistoryStore();
+    historyStore.invalidateSoles();
+    void historyStore.loadSoles();
+  }
+
   // ── Sole CRUD ──────────────────────────────────────────────────────────────
 
   function openCreateSole() {
@@ -276,6 +291,7 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
           soles.value[idx].sole_name = soleForm.value.sole_name.trim();
         }
       }
+      syncPlanningStore();
       closeSoleModal();
     } catch (e: any) {
       soleModalError.value = e?.response?.data?.message ?? 'Une erreur est survenue.';
@@ -289,6 +305,7 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
       await soilBoardsApi.deleteSole(id);
       soles.value = soles.value.filter((s) => s.id_sole !== id);
       if (selectedSoleId.value === id) selectedSoleId.value = null;
+      syncPlanningStore();
     } catch {
       error.value = 'Impossible de supprimer cette sole.';
     }
@@ -354,6 +371,7 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
           if (idx !== -1) Object.assign(sole.boards[idx], resp.data);
         }
       }
+      syncPlanningStore();
       closeBoardModal();
     } catch (e: any) {
       boardModalError.value = e?.response?.data?.message ?? 'Une erreur est survenue.';
@@ -372,10 +390,62 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
     }
   }
 
+  async function batchCreateBoards(
+    soleId: number,
+    prefix: string,
+    count: number,
+    width: number,
+    length: number,
+    sectionsPerBoard: number,
+  ): Promise<void> {
+    const sole = soles.value.find((s) => s.id_sole === soleId);
+    if (!sole) return;
+    if (!sole.boards) sole.boards = [];
+
+    for (let i = 1; i <= count; i++) {
+      const boardName = `${prefix}${i}`;
+      const resp = await soilBoardsApi.createBoard({
+        board_name: boardName,
+        board_width: width,
+        board_lenght: length,
+        board_active: true,
+        id_sole: soleId,
+      });
+      sole.boards.push(resp.data);
+      if (sectionsPerBoard >= 1) {
+        await rotationsApi.createOrGetSectionPlan(resp.data.id_board, sectionsPerBoard);
+      }
+    }
+    syncPlanningStore();
+  }
+
+  const sectionsLoading = ref<Record<number, boolean>>({});
+  const sectionsError = ref<Record<number, string | null>>({});
+
+  async function setSections(boardId: number, n: number): Promise<void> {
+    if (n < 1 || n > 20) return;
+    sectionsLoading.value = { ...sectionsLoading.value, [boardId]: true };
+    sectionsError.value = { ...sectionsError.value, [boardId]: null };
+    try {
+      const res = await rotationsApi.createOrGetSectionPlan(boardId, n);
+      // Synchroniser le cache du planning store pour que la grille reflète immédiatement le bon nombre
+      const actualCount = res.data.sectionPlan.number_of_section;
+      const planningStore = usePlanningStore();
+      planningStore.sectionPlanCache = new Map(planningStore.sectionPlanCache).set(boardId, actualCount);
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? 'Impossible de modifier les sections.';
+      sectionsError.value = { ...sectionsError.value, [boardId]: String(msg) };
+      throw e;
+    } finally {
+      sectionsLoading.value = { ...sectionsLoading.value, [boardId]: false };
+    }
+  }
+
   return {
     exploitations,
     soles,
     loading,
+    loaded,
     error,
     exploitationCoords,
     selectedExploitationId,
@@ -394,5 +464,7 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
     openCreateExploitation, openEditExploitation, closeExpModal, submitExpModal,
     openCreateSole, openEditSole, closeSoleModal, submitSoleModal, deleteSole,
     openCreateBoard, openEditBoard, closeBoardModal, submitBoardModal, deleteBoard,
+    batchCreateBoards,
+    sectionsLoading, sectionsError, setSections,
   };
 });

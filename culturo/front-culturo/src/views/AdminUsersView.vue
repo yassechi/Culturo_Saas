@@ -106,6 +106,7 @@
             <th scope="col">Utilisateur</th>
             <th scope="col">Email</th>
             <th scope="col">Rôle</th>
+            <th scope="col">Promotion</th>
             <th scope="col">Statut</th>
             <th scope="col" class="col-actions">Actions</th>
           </tr>
@@ -144,6 +145,19 @@
               </select>
             </td>
 
+            <!-- Promotion -->
+            <td class="cell-group">
+              <select
+                :value="user.id_group ?? ''"
+                class="group-select"
+                :aria-label="`Promotion de ${user.user_first_name}`"
+                @change="store.assignUserGroup(user.id_user, ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
+              >
+                <option value="">—</option>
+                <option v-for="g in store.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+              </select>
+            </td>
+
             <!-- Statut — toggle -->
             <td class="cell-status">
               <button
@@ -178,6 +192,56 @@
     <p v-if="!store.loading && store.filteredUsers.length" class="results-count">
       {{ store.filteredUsers.length }} utilisateur(s) affiché(s) sur {{ store.stats.total }}
     </p>
+
+    <!-- Promotions -------------------------------------------------------- -->
+    <section class="promotions-section">
+      <h3 class="promotions-title">Gestion des promotions</h3>
+      <p class="promotions-sub">Créez des groupes (promotions, sessions) pour organiser vos stagiaires. Chaque utilisateur peut être affecté à une promotion via la colonne ci-dessus.</p>
+
+      <div v-if="store.groupError" class="alert-error" role="alert">
+        {{ store.groupError }}
+        <button type="button" class="alert-close" @click="store.groupError = null">✕</button>
+      </div>
+
+      <div class="promotions-form">
+        <input
+          v-model="store.groupForm.name"
+          class="promo-input"
+          type="text"
+          placeholder="Nom de la promotion (ex: Session 2026)"
+        />
+        <input
+          v-model="store.groupForm.description"
+          class="promo-input promo-input--wide"
+          type="text"
+          placeholder="Description (optionnel)"
+        />
+        <button type="button" class="primary-button promo-btn" @click="store.saveGroup()">
+          {{ store.groupEditId !== null ? 'Mettre à jour' : 'Créer' }}
+        </button>
+        <button v-if="store.groupEditId !== null" type="button" class="secondary-button promo-btn" @click="store.cancelGroupEdit()">
+          Annuler
+        </button>
+      </div>
+
+      <div v-if="store.groupsLoading" class="promotions-empty">Chargement…</div>
+      <div v-else-if="store.groups.length === 0" class="promotions-empty">Aucune promotion créée.</div>
+      <ul v-else class="promotions-list">
+        <li v-for="g in store.groups" :key="g.id" class="promo-row">
+          <div class="promo-info">
+            <strong class="promo-name">{{ g.name }}</strong>
+            <span v-if="g.description" class="promo-desc">{{ g.description }}</span>
+            <span class="promo-count">
+              {{ users_in_group(g.id) }} membre(s)
+            </span>
+          </div>
+          <div class="promo-actions">
+            <button type="button" class="action-btn action-btn--edit" @click="store.editGroup(g)">✏️</button>
+            <button type="button" class="action-btn action-btn--delete" @click="store.deleteGroup(g.id)">🗑</button>
+          </div>
+        </li>
+      </ul>
+    </section>
 
     <!-- Modal Créer / Modifier -------------------------------------------- -->
     <Teleport to="body">
@@ -261,13 +325,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, onActivated } from 'vue';
 import { useAdminUsersStore, type RoleName } from '@/stores/adminUsers';
 import type { ApiUser } from '@/api/admin';
 
 const store = useAdminUsersStore();
 
-onMounted(() => store.loadUsers());
+function users_in_group(groupId: number): number {
+  return store.users.filter((u) => u.id_group === groupId).length;
+}
+
+onMounted(() => {
+  store.loadUsers();
+  store.loadGroups();
+});
+
+onActivated(() => {
+  store.loadUsers();
+  store.loadGroups();
+});
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Tous' },
@@ -764,4 +840,101 @@ function onRoleChange(user: ApiUser, event: Event) {
   .form-row { grid-template-columns: 1fr; }
   .toolbar { flex-direction: column; align-items: stretch; }
 }
+
+/* ── Promotion column ──────────────────────────────────────────────────────── */
+.cell-group { width: 140px; }
+.group-select {
+  font-size: 0.8rem;
+  padding: 4px 6px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(39,65,53,0.18);
+  background: rgba(255,255,255,0.9);
+  color: var(--text-primary);
+  cursor: pointer;
+  width: 100%;
+}
+
+/* ── Promotions section ────────────────────────────────────────────────────── */
+.promotions-section {
+  margin-top: 2.5rem;
+  background: rgba(255,255,255,0.85);
+  border: 1.5px solid rgba(39,65,53,0.1);
+  border-radius: 20px;
+  padding: 1.5rem;
+}
+
+.promotions-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.promotions-sub {
+  font-size: 0.85rem;
+  color: #555;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.promotions-form {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.promo-input {
+  flex: 1;
+  min-width: 140px;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: 1.5px solid rgba(39,65,53,0.18);
+  background: rgba(255,255,255,0.9);
+  font-size: 0.88rem;
+}
+.promo-input--wide { flex: 2; }
+
+.promo-btn { padding: 0.55rem 1rem; font-size: 0.88rem; }
+
+.promotions-empty { color: #888; font-size: 0.88rem; padding: 0.5rem 0; }
+
+.promotions-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.promo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.9rem;
+  background: rgba(239,248,232,0.6);
+  border: 1px solid rgba(39,65,53,0.1);
+  border-radius: 12px;
+}
+
+.promo-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.promo-name { font-size: 0.9rem; }
+.promo-desc { font-size: 0.8rem; color: #666; }
+.promo-count {
+  font-size: 0.75rem;
+  background: rgba(39,65,53,0.1);
+  color: #2d5016;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 600;
+}
+
+.promo-actions { display: flex; gap: 0.4rem; }
+
+/* ── Topbar right alignment ─────────────────────────────────────────────────── */
 </style>

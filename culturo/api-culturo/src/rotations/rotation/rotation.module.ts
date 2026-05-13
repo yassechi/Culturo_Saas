@@ -8,6 +8,10 @@ import { Vegetable } from 'src/entities/vegetable.entity';
 import { SectionPlan } from 'src/entities/section_plan.entity';
 import { Board } from 'src/entities/board.entity';
 import { Variety } from 'src/entities/variety.entity';
+import { FamilyIncompatibility } from 'src/entities/family_incompatibility.entity';
+import { Watering } from 'src/entities/watering.entity';
+import { Harvest } from 'src/entities/harvest.entity';
+import { Observation } from 'src/entities/observation.entity';
 import { UsersModule } from 'src/users/users.module';
 
 @Module({
@@ -17,7 +21,11 @@ import { UsersModule } from 'src/users/users.module';
       Vegetable,
       SectionPlan,
       Board,
-      Variety, // Ajoutez cette ligne
+      Variety,
+      FamilyIncompatibility,
+      Watering,
+      Harvest,
+      Observation,
     ]),
     UsersModule,
   ],
