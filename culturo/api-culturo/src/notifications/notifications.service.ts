@@ -59,7 +59,9 @@ export class NotificationsService {
     }
 
     const pending = await this.observationRepository.count({
-      where: { review_status: 'pending' },
+      where: payload.role === 'formateur'
+        ? { review_status: 'pending', author: { id_formateur: payload.id } }
+        : { review_status: 'pending' },
     });
 
     if (pending === 0) return;
@@ -76,47 +78,86 @@ export class NotificationsService {
 
   private async addUpcomingHarvestNotifications(out: AppNotification[]) {
     const today = new Date();
-    const in14Days = new Date();
-    in14Days.setDate(today.getDate() + 14);
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+    const in7Days = new Date(today);
+    in7Days.setDate(today.getDate() + 7);
 
-    const upcomingSections = await this.sectionRepository
+    const sections = await this.sectionRepository
       .createQueryBuilder('section')
       .leftJoinAndSelect('section.vegetable', 'vegetable')
       .innerJoin('section.sectionPlan', 'sp')
       .innerJoin('sp.board', 'board')
       .where('section.section_active = TRUE')
-      .andWhere('section.end_date >= :today', { today })
-      .andWhere('section.end_date <= :in14Days', { in14Days })
+      .andWhere('section.end_date <= :in7Days', { in7Days })
       .select(['section.id_section', 'section.end_date', 'section.section_number', 'vegetable.vegetable_name', 'board.board_name'])
       .getMany();
 
-    if (upcomingSections.length === 0) return;
+    if (sections.length === 0) return;
 
     const fmt = (d: Date | string) =>
       new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 
-    if (upcomingSections.length === 1) {
-      const s = upcomingSections[0];
+    const overdue = sections.filter((s) => new Date(s.end_date) < today);
+    const dueToday = sections.filter((s) => {
+      const d = new Date(s.end_date);
+      return d >= today && d <= todayEnd;
+    });
+    const upcoming = sections.filter((s) => new Date(s.end_date) > todayEnd);
+
+    if (overdue.length > 0) {
       out.push({
-        id: `harvest-${s.id_section}`,
+        id: `harvest-overdue`,
         type: 'upcoming_harvest',
-        title: 'Récolte imminente',
-        body: `${s.vegetable?.vegetable_name ?? 'Culture'} — fin prévue le ${fmt(s.end_date)}.`,
-        link: '/recoltes',
-        severity: 'info',
-      });
-    } else {
-      out.push({
-        id: 'harvest-upcoming',
-        type: 'upcoming_harvest',
-        title: `${upcomingSections.length} récoltes dans les 14 prochains jours`,
-        body: upcomingSections
+        title: `${overdue.length} récolte${overdue.length > 1 ? 's' : ''} en retard`,
+        body: overdue
           .slice(0, 3)
-          .map((s) => `${s.vegetable?.vegetable_name ?? '?'} (${fmt(s.end_date)})`)
-          .join(', ') + (upcomingSections.length > 3 ? '…' : ''),
-        link: '/recoltes',
-        severity: 'info',
+          .map((s) => `${s.vegetable?.vegetable_name ?? '?'} (prévu le ${fmt(s.end_date)})`)
+          .join(', ') + (overdue.length > 3 ? '…' : ''),
+        link: '/tableau-de-bord',
+        severity: 'critical',
       });
+    }
+
+    if (dueToday.length > 0) {
+      out.push({
+        id: `harvest-today`,
+        type: 'upcoming_harvest',
+        title: `${dueToday.length} récolte${dueToday.length > 1 ? 's' : ''} à faire aujourd'hui`,
+        body: dueToday
+          .slice(0, 3)
+          .map((s) => s.vegetable?.vegetable_name ?? '?')
+          .join(', ') + (dueToday.length > 3 ? '…' : ''),
+        link: '/tableau-de-bord',
+        severity: 'warning',
+      });
+    }
+
+    if (upcoming.length > 0) {
+      if (upcoming.length === 1) {
+        const s = upcoming[0];
+        out.push({
+          id: `harvest-${s.id_section}`,
+          type: 'upcoming_harvest',
+          title: 'Récolte imminente',
+          body: `${s.vegetable?.vegetable_name ?? 'Culture'} — fin prévue le ${fmt(s.end_date)}.`,
+          link: '/tableau-de-bord',
+          severity: 'info',
+        });
+      } else {
+        out.push({
+          id: 'harvest-upcoming',
+          type: 'upcoming_harvest',
+          title: `${upcoming.length} récoltes dans les 7 prochains jours`,
+          body: upcoming
+            .slice(0, 3)
+            .map((s) => `${s.vegetable?.vegetable_name ?? '?'} (${fmt(s.end_date)})`)
+            .join(', ') + (upcoming.length > 3 ? '…' : ''),
+          link: '/tableau-de-bord',
+          severity: 'info',
+        });
+      }
     }
   }
 }

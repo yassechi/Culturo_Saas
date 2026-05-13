@@ -265,7 +265,7 @@
 
         <!-- ── Déclarer la récolte ───────────────────────────────────────── -->
         <section v-if="harvestableEntry" class="panel-section panel-section-harvest">
-          <div class="harvest-header">
+          <button type="button" class="section-toggle-header harvest-header" @click="harvestOpen = !harvestOpen">
             <span class="harvest-icon">🌾</span>
             <div>
               <h4>Déclarer la récolte</h4>
@@ -274,8 +274,11 @@
                 <span v-if="harvestableEntry.varietyName"> — {{ harvestableEntry.varietyName }}</span>
               </p>
             </div>
-          </div>
+            <span v-if="harvestDone && !harvestOpen" class="section-done-badge">✓ Récoltée</span>
+            <span class="section-toggle-chevron" :class="{ open: harvestOpen }">›</span>
+          </button>
 
+          <template v-if="harvestOpen">
           <div class="form-grid">
             <div class="form-field">
               <label for="harvest-date">Date de récolte *</label>
@@ -338,83 +341,91 @@
               Annuler cette culture
             </button>
           </div>
+          </template>
         </section>
 
         <!-- ── Fertilisation ────────────────────────────────────────────── -->
         <section class="panel-section panel-section-fertil">
-          <div class="fertil-header">
+          <button type="button" class="section-toggle-header fertil-header" @click="fertilOpen = !fertilOpen">
             <span class="fertil-icon">🌱</span>
             <h4>Fertiliser</h4>
-          </div>
-
-          <div class="water-scope">
-            <label class="scope-option">
-              <input type="radio" v-model="fertilScope" value="board" />
-              Planche entière
-              <span class="scope-name scope-name-fertil">{{ store.openSection!.boardName }}</span>
-            </label>
-            <label v-if="currentSole" class="scope-option">
-              <input type="radio" v-model="fertilScope" value="sole" />
-              Sole entière
-              <span class="scope-name scope-name-fertil">{{ currentSole.sole_name }}</span>
-            </label>
-          </div>
-
-          <div class="form-grid" style="margin-top: 0.65rem;">
-            <div class="form-field form-field-full">
-              <label for="fertil-type">Type d'amendement *</label>
-              <select id="fertil-type" v-model="fertilCatalogueId" class="variety-select">
-                <option value="">— Choisir —</option>
-                <option
-                  v-for="item in amendementStore.catalogue"
-                  :key="item.id_amendement"
-                  :value="item.id_amendement"
-                >{{ item.amendment_name }}</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="fertil-date">Date *</label>
-              <input id="fertil-date" v-model="fertilDate" type="date" :max="todayIso" />
-            </div>
-            <div class="form-field">
-              <label for="fertil-qty">Quantité</label>
-              <input id="fertil-qty" v-model.number="fertilQty" type="number" min="0" placeholder="ex: 2" />
-            </div>
-            <div class="form-field form-field-full">
-              <label for="fertil-unit">Unité</label>
-              <select id="fertil-unit" v-model="fertilUnit" class="variety-select">
-                <option value="kg">kg</option>
-                <option value="L">L</option>
-                <option value="g">g</option>
-                <option value="mL">mL</option>
-                <option value="sacs">sacs</option>
-              </select>
-            </div>
-            <div class="form-field form-field-full">
-              <label for="fertil-desc">Description</label>
-              <input id="fertil-desc" v-model="fertilDesc" type="text" placeholder="ex: Appliqué en surface…" />
-            </div>
-          </div>
-
-          <p v-if="amendementStore.submitError" class="water-error">{{ amendementStore.submitError }}</p>
-
-          <button
-            type="button"
-            class="fertil-btn"
-            :disabled="amendementStore.submitting || !fertilCatalogueId"
-            @click="doFertil"
-          >
-            {{ amendementStore.submitting ? 'Enregistrement…' : 'Appliquer la fertilisation' }}
+            <span v-if="fertilDone && !fertilOpen" class="section-done-badge">✓ Appliqué</span>
+            <span class="section-toggle-chevron" :class="{ open: fertilOpen }">›</span>
           </button>
+
+          <template v-if="fertilOpen">
+            <div class="water-scope">
+              <label class="scope-option">
+                <input type="radio" v-model="fertilScope" value="board" />
+                Planche entière
+                <span class="scope-name scope-name-fertil">{{ store.openSection!.boardName }}</span>
+              </label>
+              <label v-if="currentSole" class="scope-option">
+                <input type="radio" v-model="fertilScope" value="sole" />
+                Sole entière
+                <span class="scope-name scope-name-fertil">{{ currentSole.sole_name }}</span>
+              </label>
+            </div>
+
+            <div class="form-grid" style="margin-top: 0.65rem;">
+              <div class="form-field form-field-full">
+                <label for="fertil-type">Type d'amendement *</label>
+                <select id="fertil-type" v-model="fertilCatalogueId" class="variety-select">
+                  <option value="">— Choisir —</option>
+                  <option
+                    v-for="item in amendementStore.catalogue"
+                    :key="item.id_amendement"
+                    :value="item.id_amendement"
+                  >{{ item.amendment_name }}</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label for="fertil-date">Date *</label>
+                <input id="fertil-date" v-model="fertilDate" type="date" :max="todayIso" />
+              </div>
+              <div class="form-field">
+                <label for="fertil-qty">Quantité</label>
+                <input id="fertil-qty" v-model.number="fertilQty" type="number" min="0" placeholder="ex: 2" />
+              </div>
+              <div class="form-field form-field-full">
+                <label for="fertil-unit">Unité</label>
+                <select id="fertil-unit" v-model="fertilUnit" class="variety-select">
+                  <option value="kg">kg</option>
+                  <option value="L">L</option>
+                  <option value="g">g</option>
+                  <option value="mL">mL</option>
+                  <option value="sacs">sacs</option>
+                </select>
+              </div>
+              <div class="form-field form-field-full">
+                <label for="fertil-desc">Description</label>
+                <input id="fertil-desc" v-model="fertilDesc" type="text" placeholder="ex: Appliqué en surface…" />
+              </div>
+            </div>
+
+            <p v-if="amendementStore.submitError" class="water-error">{{ amendementStore.submitError }}</p>
+
+            <button
+              type="button"
+              class="fertil-btn"
+              :disabled="amendementStore.submitting || !fertilCatalogueId"
+              @click="doFertil"
+            >
+              {{ amendementStore.submitting ? 'Enregistrement…' : 'Appliquer la fertilisation' }}
+            </button>
+          </template>
         </section>
 
         <!-- ── Traitement ─────────────────────────────────────────────────── -->
         <section class="panel-section panel-section-treat">
-          <div class="treat-header">
+          <button type="button" class="section-toggle-header treat-header" @click="treatOpen = !treatOpen">
             <span class="treat-icon">🧪</span>
             <h4>Traiter</h4>
-          </div>
+            <span v-if="treatDone && !treatOpen" class="section-done-badge">✓ Appliqué</span>
+            <span class="section-toggle-chevron" :class="{ open: treatOpen }">›</span>
+          </button>
 
+          <template v-if="treatOpen">
           <div class="water-scope">
             <label class="scope-option">
               <input type="radio" v-model="treatScope" value="board" />
@@ -473,15 +484,19 @@
           >
             {{ treatmentStore.submitting ? 'Enregistrement…' : 'Appliquer le traitement' }}
           </button>
+          </template>
         </section>
 
         <!-- ── Arrosage ──────────────────────────────────────────────────── -->
         <section class="panel-section panel-section-water">
-          <div class="water-header">
+          <button type="button" class="section-toggle-header water-header" @click="waterOpen = !waterOpen">
             <span class="water-icon">💧</span>
             <h4>Arroser</h4>
-          </div>
+            <span v-if="waterDone && !waterOpen" class="section-done-badge">✓ Arrosé</span>
+            <span class="section-toggle-chevron" :class="{ open: waterOpen }">›</span>
+          </button>
 
+          <template v-if="waterOpen">
           <div class="water-scope">
             <label class="scope-option" :class="{ 'scope-disabled': !harvestableEntry }">
               <input type="radio" v-model="waterScope" value="section" :disabled="!harvestableEntry" />
@@ -537,7 +552,44 @@
             </template>
             <p v-else class="water-recent-empty">Aucun arrosage enregistré pour cette section.</p>
           </template>
+          </template>
         </section>
+
+        <!-- ── Succès récolte ────────────────────────────────────────────── -->
+        <div v-if="harvestSuccess" class="planting-success-banner harvest-success-banner">
+          <span class="success-icon">🌾</span>
+          <div>
+            <strong>Récolte enregistrée !</strong>
+            <p>La récolte a bien été sauvegardée. Fermeture…</p>
+          </div>
+        </div>
+
+        <!-- ── Succès fertilisation ──────────────────────────────────────── -->
+        <div v-if="fertilSuccess" class="planting-success-banner fertil-success-banner">
+          <span class="success-icon">🌱</span>
+          <div>
+            <strong>Fertilisation appliquée !</strong>
+            <p>L'amendement a bien été enregistré. Fermeture…</p>
+          </div>
+        </div>
+
+        <!-- ── Succès traitement ─────────────────────────────────────────── -->
+        <div v-if="treatSuccess" class="planting-success-banner treat-success-banner">
+          <span class="success-icon">🧪</span>
+          <div>
+            <strong>Traitement appliqué !</strong>
+            <p>Le traitement a bien été enregistré. Fermeture…</p>
+          </div>
+        </div>
+
+        <!-- ── Succès arrosage ───────────────────────────────────────────── -->
+        <div v-if="waterSuccess" class="planting-success-banner water-success-banner">
+          <span class="success-icon">💧</span>
+          <div>
+            <strong>Arrosage enregistré !</strong>
+            <p>L'arrosage a bien été enregistré. Fermeture…</p>
+          </div>
+        </div>
 
         <!-- ── Succès plantation ─────────────────────────────────────────── -->
         <div v-if="plantingSuccess" class="planting-success-banner">
@@ -888,6 +940,10 @@ const harvestableEntry = computed(() => {
   );
 });
 
+const harvestOpen = ref(true);
+const harvestDone = ref(false);
+const harvestSuccess = ref(false);
+
 const harvestForm = ref({
   date: todayIso,
   quantity: 0,
@@ -908,8 +964,11 @@ async function confirmHarvest() {
     userId: auth.user.id,
   });
   if (!harvestStore.error) {
+    harvestOpen.value = false;
+    harvestDone.value = true;
+    harvestSuccess.value = true;
     await store.loadCulturePlan();
-    store.closeSectionPanel();
+    setTimeout(() => store.closeSectionPanel(), 2000);
   }
 }
 
@@ -937,6 +996,10 @@ async function cancelSection() {
 
 // ── Arrosage ─────────────────────────────────────────────────────────────────
 
+const waterOpen = ref(true);
+const waterDone = ref(false);
+const waterSuccess = ref(false);
+
 function nowLocalDatetime(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -961,13 +1024,22 @@ async function doWater() {
   } else if (waterScope.value === 'sole' && currentSole.value) {
     await wateringStore.waterBulk({ datetime, soleId: currentSole.value.id_sole });
   }
-  if (!wateringStore.submitError && waterScope.value === 'section' && harvestableEntry.value) {
-    await wateringStore.loadBySection(harvestableEntry.value.sectionId);
+  if (!wateringStore.submitError) {
+    waterOpen.value = false;
+    waterDone.value = true;
+    waterSuccess.value = true;
+    if (waterScope.value === 'section' && harvestableEntry.value) {
+      await wateringStore.loadBySection(harvestableEntry.value.sectionId);
+    }
+    setTimeout(() => store.closeSectionPanel(), 2000);
   }
 }
 
 // ── Fertilisation ────────────────────────────────────────────────────────────
 
+const fertilOpen = ref(true);
+const fertilDone = ref(false);
+const fertilSuccess = ref(false);
 const fertilScope = ref<'board' | 'sole'>('board');
 const fertilCatalogueId = ref<number | ''>('');
 const fertilDate = ref(todayIso);
@@ -994,11 +1066,18 @@ async function doFertil() {
   if (!amendementStore.submitError) {
     fertilDesc.value = '';
     fertilQty.value = undefined;
+    fertilOpen.value = false;
+    fertilDone.value = true;
+    fertilSuccess.value = true;
+    setTimeout(() => store.closeSectionPanel(), 2000);
   }
 }
 
 // ── Traitement ───────────────────────────────────────────────────────────────
 
+const treatOpen = ref(true);
+const treatDone = ref(false);
+const treatSuccess = ref(false);
 const treatScope = ref<'board' | 'sole'>('board');
 const treatCatalogueId = ref<number | ''>('');
 const treatDate = ref(todayIso);
@@ -1025,6 +1104,10 @@ async function doTreat() {
   if (!treatmentStore.submitError) {
     treatDesc.value = '';
     treatQty.value = undefined;
+    treatOpen.value = false;
+    treatDone.value = true;
+    treatSuccess.value = true;
+    setTimeout(() => store.closeSectionPanel(), 2000);
   }
 }
 
@@ -1942,6 +2025,34 @@ async function confirm(bypass: boolean) {
   color: rgba(30, 92, 42, 0.75);
 }
 
+.harvest-success-banner {
+  background: linear-gradient(135deg, rgba(180, 130, 10, 0.14), rgba(140, 90, 0, 0.08));
+  border-color: rgba(180, 130, 10, 0.35);
+}
+.harvest-success-banner strong { color: #7a5a10; }
+.harvest-success-banner p { color: rgba(122, 90, 16, 0.75); }
+
+.fertil-success-banner {
+  background: linear-gradient(135deg, rgba(74, 130, 60, 0.14), rgba(39, 100, 53, 0.08));
+  border-color: rgba(74, 130, 60, 0.35);
+}
+.fertil-success-banner strong { color: #2d6e22; }
+.fertil-success-banner p { color: rgba(45, 110, 34, 0.75); }
+
+.treat-success-banner {
+  background: linear-gradient(135deg, rgba(130, 60, 160, 0.14), rgba(90, 20, 120, 0.08));
+  border-color: rgba(130, 60, 160, 0.35);
+}
+.treat-success-banner strong { color: #6a2090; }
+.treat-success-banner p { color: rgba(106, 32, 144, 0.75); }
+
+.water-success-banner {
+  background: linear-gradient(135deg, rgba(26, 90, 171, 0.14), rgba(10, 60, 130, 0.08));
+  border-color: rgba(26, 90, 171, 0.35);
+}
+.water-success-banner strong { color: #1a4a8a; }
+.water-success-banner p { color: rgba(26, 74, 138, 0.75); }
+
 /* Footer */
 .panel-footer {
   padding: 1rem 1.5rem 1.35rem;
@@ -2005,6 +2116,42 @@ async function confirm(bypass: boolean) {
 .panel-section-fertil {
   border-color: rgba(74, 130, 60, 0.25);
   background: rgba(235, 248, 233, 0.78);
+}
+
+.section-toggle-header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 0.85rem;
+}
+
+.section-toggle-chevron {
+  margin-left: auto;
+  font-size: 1.2rem;
+  color: rgba(39, 65, 53, 0.4);
+  transform: rotate(90deg);
+  transition: transform 200ms;
+  line-height: 1;
+}
+.section-toggle-chevron.open {
+  transform: rotate(-90deg);
+}
+
+.section-done-badge {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(50, 120, 50, 0.85);
+  background: rgba(74, 140, 60, 0.12);
+  border: 1px solid rgba(74, 140, 60, 0.25);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
 }
 
 .fertil-header {

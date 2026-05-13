@@ -38,10 +38,17 @@ export class ObservationsService {
 
     if (payload.role === 'stagiaire' || query.mine) {
       builder.andWhere('author.id_user = :userId', { userId: payload.id });
-    } else if (query.authorId) {
-      builder.andWhere('author.id_user = :authorId', {
-        authorId: query.authorId,
-      });
+    } else if (payload.role === 'formateur') {
+      // Un formateur ne voit que les observations de ses stagiaires assignés
+      builder.andWhere('author.id_formateur = :formateurId', { formateurId: payload.id });
+      if (query.authorId) {
+        builder.andWhere('author.id_user = :authorId', { authorId: query.authorId });
+      }
+    } else {
+      // Admin : voit tout
+      if (query.authorId) {
+        builder.andWhere('author.id_user = :authorId', { authorId: query.authorId });
+      }
     }
 
     if (query.reviewStatus) {
@@ -108,12 +115,15 @@ export class ObservationsService {
       throw new NotFoundException('Observation non trouvée.');
     }
 
-    if (
-      payload.role === 'stagiaire' &&
-      observation.author.id_user !== payload.id
-    ) {
+    if (payload.role === 'stagiaire' && observation.author.id_user !== payload.id) {
       throw new ForbiddenException(
         'Vous ne pouvez consulter que vos propres observations.',
+      );
+    }
+
+    if (payload.role === 'formateur' && observation.author.id_formateur !== payload.id) {
+      throw new ForbiddenException(
+        'Cette observation ne concerne pas vos stagiaires.',
       );
     }
 
@@ -184,18 +194,18 @@ export class ObservationsService {
 
     const saved = await this.findOne(observation.id_observation, payload);
 
-    // Notifier les formateurs actifs en arrière-plan (ne bloque pas la réponse)
-    this.userRepository
-      .createQueryBuilder('user')
-      .innerJoin('user.role', 'role')
-      .where('role.role_name IN (:...roles)', { roles: ['formateur', 'admin'] })
-      .andWhere('user.user_active = true')
-      .select(['user.email', 'user.user_first_name'])
-      .getMany()
-      .then((formateurs) =>
-        this.emailService.sendObservationSubmittedToFormateurs(formateurs, author, saved),
-      )
-      .catch(() => {/* log déjà géré dans EmailService */});
+    // Envoyer uniquement au formateur assigné au stagiaire
+    if (author.id_formateur) {
+      this.userRepository
+        .findOne({ where: { id_user: author.id_formateur } })
+        .then((formateur) => {
+          if (formateur?.user_active) {
+            return this.emailService.sendObservationSubmittedToFormateurs([formateur], author, saved);
+          }
+          return Promise.resolve();
+        })
+        .catch((err) => { console.error('[Observation] Erreur envoi email formateur:', err); });
+    }
 
     return saved;
   }
@@ -233,6 +243,7 @@ export class ObservationsService {
     observation.review_notes = dto.reviewNotes?.trim() || null;
     observation.reviewed_at = new Date();
     observation.reviewer = reviewer;
+    observation.seen_by_author = false;
 
     await this.observationRepository.save(observation);
 
@@ -250,6 +261,17 @@ export class ObservationsService {
       .catch(() => {/* log déjà géré dans EmailService */});
 
     return reviewed;
+  }
+
+  async markAllSeenForAuthor(authorId: number): Promise<void> {
+    await this.observationRepository
+      .createQueryBuilder()
+      .update()
+      .set({ seen_by_author: true })
+      .where('id_author = :authorId', { authorId })
+      .andWhere('seen_by_author = false')
+      .andWhere('review_status != :pending', { pending: 'pending' })
+      .execute();
   }
 
   private buildObservationQuery() {

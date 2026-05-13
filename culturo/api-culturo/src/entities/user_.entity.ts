@@ -76,13 +76,20 @@ export class User_ {
   @Column({ nullable: true, type: 'int' })
   id_group: number | null;
 
+  @ManyToOne(() => UserGroup, (group) => group.users, { nullable: true })
+  @JoinColumn({ name: 'id_group' })
+  group: UserGroup | null;
+
+  @Column({ nullable: true, type: 'int' })
+  id_formateur: number | null;
+
+  @ManyToOne(() => User_, { nullable: true, eager: false })
+  @JoinColumn({ name: 'id_formateur' })
+  formateur: User_ | null;
+
   @Column({ type: 'varchar', nullable: true })
   reset_token: string | null;
 
   @Column({ type: 'timestamp', nullable: true })
   reset_token_expires: Date | null;
-
-  @ManyToOne(() => UserGroup, (group) => group.users, { nullable: true })
-  @JoinColumn({ name: 'id_group' })
-  group: UserGroup | null;
 }

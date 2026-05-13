@@ -26,6 +26,8 @@ export interface DashboardRotationAlert {
   familyName: string;
   lastCultivationDate: string | null;
   activeThisYear: boolean;
+  ruleType: 'rotation_5y' | 'cohabitation';
+  description?: string;
 }
 
 export interface DashboardContributor {

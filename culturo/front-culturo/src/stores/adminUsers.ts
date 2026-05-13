@@ -28,6 +28,7 @@ export interface UserForm {
   phone: string;
   role: RoleName;
   user_active: boolean;
+  id_formateur: number | null;
 }
 
 function emptyForm(): UserForm {
@@ -39,6 +40,7 @@ function emptyForm(): UserForm {
     phone: '',
     role: 'stagiaire',
     user_active: true,
+    id_formateur: null,
   };
 }
 
@@ -143,6 +145,7 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
       phone: user.phone ?? '',
       role: resolveRoleName(user),
       user_active: user.user_active,
+      id_formateur: user.id_formateur ?? null,
     };
     modalError.value = null;
     modalOpen.value = true;
@@ -169,8 +172,18 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
           birth_date: '2000-01-01',
           path_photo: '',
         };
-        const resp = await adminApi.createUser(payload);
-        users.value.push(resp.data);
+        await adminApi.createUser(payload);
+        // Recharger la liste complète pour avoir le nouvel utilisateur avec son id_user
+        const listResp = await adminApi.getAllUsers();
+        users.value = listResp.data;
+        // Assigner le formateur si sélectionné
+        if (modalForm.value.id_formateur) {
+          const newUser = users.value.find((u) => u.email === payload.email);
+          if (newUser) {
+            await adminApi.updateUser({ id_user: newUser.id_user, id_formateur: modalForm.value.id_formateur });
+            newUser.id_formateur = modalForm.value.id_formateur;
+          }
+        }
       } else if (modalUserId.value !== null) {
         const payload: Record<string, any> = {
           id_user: modalUserId.value,
@@ -180,6 +193,7 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
           phone: modalForm.value.phone.trim(),
           id_role: ROLE_ID[modalForm.value.role],
           user_active: modalForm.value.user_active,
+          id_formateur: modalForm.value.id_formateur,
         };
         if (modalForm.value.hpassword) payload.hpassword = modalForm.value.hpassword;
         await adminApi.updateUser(payload);
@@ -193,6 +207,7 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
             phone: payload.phone,
             id_role: payload.id_role,
             user_active: payload.user_active,
+            id_formateur: payload.id_formateur,
           });
           if (u.role) u.role.role_name = modalForm.value.role;
         }
@@ -266,6 +281,16 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
     }
   }
 
+  async function assignUserFormateur(userId: number, formateurId: number | null) {
+    try {
+      await adminApi.updateUser({ id_user: userId, id_formateur: formateurId });
+      const u = users.value.find((u) => u.id_user === userId);
+      if (u) u.id_formateur = formateurId;
+    } catch (e: any) {
+      error.value = e?.response?.data?.message ?? 'Erreur lors de l\'affectation du formateur.';
+    }
+  }
+
   async function assignUserGroup(userId: number, groupId: number | null) {
     try {
       await adminApi.assignGroup(userId, groupId);
@@ -312,5 +337,6 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
     cancelGroupEdit,
     deleteGroup,
     assignUserGroup,
+    assignUserFormateur,
   };
 });

@@ -22,6 +22,7 @@ export const useObservationsStore = defineStore('observations', () => {
   const activeSections = ref<ObservationSectionSummary[]>([]);
   const myObservations = ref<ObservationRecord[]>([]);
   const trainerObservations = ref<ObservationRecord[]>([]);
+  const pendingCount = ref(0);
 
   const loadingSections = ref(false);
   const loadingMine = ref(false);
@@ -34,12 +35,13 @@ export const useObservationsStore = defineStore('observations', () => {
 
   const myStats = computed(() => ({
     total: myObservations.value.length,
-    pending: myObservations.value.filter((item) => item.review_status === 'pending')
-      .length,
-    approved: myObservations.value.filter((item) => item.review_status === 'approved')
-      .length,
+    pending: myObservations.value.filter((item) => item.review_status === 'pending').length,
+    approved: myObservations.value.filter((item) => item.review_status === 'approved').length,
     changesRequested: myObservations.value.filter(
       (item) => item.review_status === 'changes_requested',
+    ).length,
+    unseen: myObservations.value.filter(
+      (item) => item.review_status !== 'pending' && !item.seen_by_author,
     ).length,
   }));
 
@@ -183,6 +185,7 @@ export const useObservationsStore = defineStore('observations', () => {
       trainerObservations.value = trainerObservations.value.map((item) =>
         item.id_observation === id ? response.data : item,
       );
+      if (pendingCount.value > 0) pendingCount.value--;
       feedback.value = 'Observation relue avec succès.';
       return response.data;
     } catch (apiError: any) {
@@ -199,10 +202,31 @@ export const useObservationsStore = defineStore('observations', () => {
     return trainerObservations.value.filter((item) => item.review_status === status);
   }
 
+  async function loadPendingCount() {
+    try {
+      const response = await observationsApi.getObservations({ reviewStatus: 'pending' });
+      pendingCount.value = response.data.length;
+    } catch {
+      // silencieux — le badge reste à 0
+    }
+  }
+
+  async function markAllSeen() {
+    try {
+      await observationsApi.markAllSeen();
+      myObservations.value = myObservations.value.map((item) =>
+        item.review_status !== 'pending' ? { ...item, seen_by_author: true } : item,
+      );
+    } catch {
+      // silencieux
+    }
+  }
+
   return {
     activeSections,
     myObservations,
     trainerObservations,
+    pendingCount,
     loadingSections,
     loadingMine,
     loadingTrainer,
@@ -223,5 +247,7 @@ export const useObservationsStore = defineStore('observations', () => {
     reviewObservation,
     isReviewing,
     getObservationsByStatus,
+    markAllSeen,
+    loadPendingCount,
   };
 });

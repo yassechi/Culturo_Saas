@@ -24,7 +24,12 @@
         <RouterLink class="nav-link" to="/dashboard">Accueil</RouterLink>
 
         <template v-for="item in navItems" :key="item.to">
-          <RouterLink class="nav-link" :to="item.to">{{ item.label }}</RouterLink>
+          <RouterLink class="nav-link" :to="item.to">
+            {{ item.label }}
+            <span v-if="item.badge && item.badge.value > 0" class="nav-badge">
+              {{ item.badge.value }}
+            </span>
+          </RouterLink>
         </template>
       </nav>
 
@@ -71,15 +76,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useObservationsStore } from '@/stores/observations';
 import NotificationBell from '@/components/NotificationBell.vue';
 
 const route = useRoute();
 
 const router = useRouter();
 const auth = useAuthStore();
+const observationsStore = useObservationsStore();
+
+onMounted(() => {
+  if (auth.isFormateur || auth.isAdmin) {
+    void observationsStore.loadPendingCount();
+  }
+  if (auth.isStagiaire) {
+    void observationsStore.loadMyObservations();
+  }
+});
+
+const pendingValidationCount = computed(() =>
+  (auth.isFormateur || auth.isAdmin) ? observationsStore.pendingCount : 0,
+);
+
+const reviewedObservationCount = computed(() =>
+  auth.isStagiaire ? observationsStore.myStats.unseen : 0,
+);
 
 const SIDEBAR_KEY = 'culturo:sidebar-open';
 
@@ -114,6 +138,7 @@ const navItems = computed(() => {
 
   if (auth.isFormateur) {
     return [
+      { to: '/admin/utilisateurs', label: 'Utilisateurs' },
       { to: '/admin/botanique', label: 'Référentiel botanique' },
       { to: '/admin/sol-planches', label: 'Sol & planches' },
       { to: '/plan', label: 'Planification' },
@@ -123,7 +148,7 @@ const navItems = computed(() => {
       { to: '/traitements', label: 'Traitements' },
       { to: '/historique', label: 'Historique' },
       { to: '/observations', label: 'Observations' },
-      { to: '/validation', label: 'Validation' },
+      { to: '/validation', label: 'Validation', badge: pendingValidationCount },
       { to: '/formateur/tableau-de-bord', label: 'Tableau de bord formateur' },
     ];
   }
@@ -136,7 +161,7 @@ const navItems = computed(() => {
     { to: '/amendements', label: 'Fertilisations' },
     { to: '/traitements', label: 'Traitements' },
     { to: '/historique', label: 'Historique' },
-    { to: '/observations', label: 'Mes observations' },
+    { to: '/observations', label: 'Mes observations', badge: reviewedObservationCount },
   ];
 });
 
@@ -196,6 +221,23 @@ function handleLogout() {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e53935;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .sidebar .secondary-button {

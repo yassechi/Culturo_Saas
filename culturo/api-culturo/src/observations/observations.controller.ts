@@ -88,6 +88,17 @@ export class ObservationsController {
     return this.observationsService.create(payload, dto);
   }
 
+  @Patch('mark-seen')
+  @UseGuards(AuthChard, PermissionsGuard)
+  @RequiertPermissions(Permission.SAISIR_OBSERVATION)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Marquer toutes les observations vues pour le stagiaire connecté' })
+  @ApiResponse({ status: 200 })
+  async markAllSeen(@CurrentUser() payload: JWTPayloadType): Promise<{ ok: boolean }> {
+    await this.observationsService.markAllSeenForAuthor(payload.id);
+    return { ok: true };
+  }
+
   @Patch(':id/review')
   @UseGuards(AuthChard, PermissionsGuard)
   @RequiertPermissions(Permission.CONSULTER_OBSERVATIONS)

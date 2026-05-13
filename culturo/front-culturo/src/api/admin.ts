@@ -19,6 +19,8 @@ export interface ApiUser {
   role?: { id_role: number; role_name: string };
   id_group: number | null;
   group?: ApiGroup | null;
+  id_formateur: number | null;
+  formateur?: { id_user: number; user_first_name: string; user_last_name: string } | null;
 }
 
 export interface CreateUserPayload {
@@ -42,6 +44,7 @@ export interface UpdateUserPayload {
   phone?: string;
   id_role?: number;
   user_active?: boolean;
+  id_formateur?: number | null;
 }
 
 export const adminApi = {

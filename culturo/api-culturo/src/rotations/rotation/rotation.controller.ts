@@ -62,6 +62,16 @@ export interface PlanResult {
 export class RotationController {
   constructor(private readonly rotationService: RotationService) {}
 
+  @Get('harvest-due')
+  @UseGuards(AuthChard, PermissionsGuard)
+  @RequiertPermissions(Permission.CONSULTER_PLAN)
+  @ApiSecurity('bearer')
+  @ApiOperation({ summary: 'Légumes à récolter aujourd\'hui ou dans les prochains jours' })
+  @ApiQuery({ name: 'days', required: false, type: Number })
+  async getHarvestDue(@Query('days') days?: string) {
+    return this.rotationService.getHarvestDue(days ? parseInt(days) : 7);
+  }
+
   /**
    * Obtenir le plan de culture - Accessible aux utilisateurs authentifiés
    */

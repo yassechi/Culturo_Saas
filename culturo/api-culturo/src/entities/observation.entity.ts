@@ -50,6 +50,9 @@ export class Observation {
   @Column({ type: 'timestamp', nullable: true })
   reviewed_at: Date | null;
 
+  @Column({ type: 'boolean', default: true })
+  seen_by_author: boolean;
+
   @CreateDateColumn({ type: 'timestamp', default: () => CURRENT_TIMESTAMP })
   created_at: Date;
 

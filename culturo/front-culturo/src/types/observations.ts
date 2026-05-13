@@ -61,6 +61,7 @@ export interface ObservationRecord {
   review_status: ObservationReviewStatus;
   review_notes: string | null;
   reviewed_at: string | null;
+  seen_by_author: boolean;
   created_at: string;
   updated_at: string;
   section: ObservationSectionSummary;

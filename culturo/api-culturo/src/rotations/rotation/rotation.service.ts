@@ -1117,6 +1117,45 @@ export class RotationService {
     }
   }
 
+  async getHarvestDue(daysAhead = 7): Promise<any[]> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const limit = new Date(today);
+    limit.setDate(today.getDate() + daysAhead);
+
+    const sections = await this.sectionRepository
+      .createQueryBuilder('section')
+      .leftJoinAndSelect('section.vegetable', 'vegetable')
+      .leftJoinAndSelect('section.variety', 'variety')
+      .leftJoinAndSelect('section.sectionPlan', 'sectionPlan')
+      .leftJoinAndSelect('sectionPlan.board', 'board')
+      .leftJoinAndSelect('board.sole', 'sole')
+      .leftJoinAndSelect('sole.exploitation', 'exploitation')
+      .where('section.section_active = true')
+      .andWhere('section.end_date <= :limit', { limit })
+      .orderBy('section.end_date', 'ASC')
+      .getMany();
+
+    return sections.map((s) => {
+      const endDate = new Date(s.end_date);
+      endDate.setHours(0, 0, 0, 0);
+      const diffMs = endDate.getTime() - today.getTime();
+      const daysLeft = Math.round(diffMs / 86400000);
+      return {
+        id_section: s.id_section,
+        section_number: s.section_number,
+        end_date: s.end_date,
+        days_left: daysLeft,
+        overdue: daysLeft < 0,
+        vegetable_name: s.vegetable?.vegetable_name ?? null,
+        variety_name: s.variety?.variety_name ?? null,
+        board_name: s.sectionPlan?.board?.board_name ?? null,
+        sole_name: s.sectionPlan?.board?.sole?.sole_name ?? null,
+        exploitation_name: s.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? null,
+      };
+    });
+  }
+
   async cancelSection(sectionId: number): Promise<void> {
     const section = await this.sectionRepository.findOne({
       where: { id_section: sectionId },

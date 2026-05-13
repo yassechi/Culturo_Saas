@@ -81,6 +81,7 @@ export const useTreatmentStore = defineStore('treatment', () => {
         description: payload.description,
       });
       listLoaded.value = false;
+      void loadAll();
     } catch {
       submitError.value = 'Erreur lors de l\'enregistrement du traitement.';
       throw new Error(submitError.value);
@@ -105,6 +106,7 @@ export const useTreatmentStore = defineStore('treatment', () => {
         description: payload.description,
       });
       listLoaded.value = false;
+      void loadAll();
     } catch {
       submitError.value = 'Erreur lors du traitement en masse.';
       throw new Error(submitError.value);

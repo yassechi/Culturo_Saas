@@ -48,9 +48,23 @@
     <div class="filter-bar">
       <div class="filter-group">
         <label>Exploitation</label>
-        <select v-model="filterExploitation">
+        <select v-model="filterExploitation" @change="filterSole = ''">
           <option value="">Toutes</option>
           <option v-for="name in exploitationNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Sole</label>
+        <select v-model="filterSole" @change="filterBoard = ''">
+          <option value="">Toutes les soles</option>
+          <option v-for="name in filteredSoleNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Planche</label>
+        <select v-model="filterBoard">
+          <option value="">Toutes</option>
+          <option v-for="name in filteredBoardNames" :key="name" :value="name">{{ name }}</option>
         </select>
       </div>
       <div class="filter-group">
@@ -68,9 +82,13 @@
         <label>Jusqu'au</label>
         <input v-model="filterDateTo" type="date" />
       </div>
-      <button v-if="hasFilters" type="button" class="reset-btn" @click="resetFilters">
-        Réinitialiser
-      </button>
+      <div class="filter-actions">
+        <button v-if="hasFilters" type="button" class="reset-btn" @click="resetFilters">
+          Réinitialiser
+        </button>
+        <button type="button" class="btn-export" :disabled="filtered.length === 0" @click="exportCsv">↓ CSV</button>
+        <button type="button" class="btn-export btn-export-pdf" :disabled="filtered.length === 0" @click="exportPdf">↓ PDF</button>
+      </div>
     </div>
 
     <!-- Chargement / Erreur -->
@@ -368,6 +386,8 @@ const boardSummaries = computed(() => {
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
 const filterExploitation = ref('');
+const filterSole = ref('');
+const filterBoard = ref('');
 const filterProduct = ref('');
 const filterDateFrom = ref('');
 const filterDateTo = ref('');
@@ -376,6 +396,27 @@ const exploitationNames = computed(() => {
   const set = new Set<string>();
   for (const a of store.amendements) {
     const name = a.board?.sole?.exploitation?.exploitation_name;
+    if (name) set.add(name);
+  }
+  return [...set].sort();
+});
+
+const filteredSoleNames = computed(() => {
+  const set = new Set<string>();
+  for (const a of store.amendements) {
+    if (filterExploitation.value && (a.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    const name = a.board?.sole?.sole_name;
+    if (name) set.add(name);
+  }
+  return [...set].sort();
+});
+
+const filteredBoardNames = computed(() => {
+  const set = new Set<string>();
+  for (const a of store.amendements) {
+    if (filterExploitation.value && (a.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    if (filterSole.value && (a.board?.sole?.sole_name ?? '') !== filterSole.value) continue;
+    const name = a.board?.board_name;
     if (name) set.add(name);
   }
   return [...set].sort();
@@ -390,17 +431,15 @@ const productNames = computed(() => {
 });
 
 const hasFilters = computed(
-  () => filterExploitation.value || filterProduct.value || filterDateFrom.value || filterDateTo.value,
+  () => filterExploitation.value || filterSole.value || filterBoard.value || filterProduct.value || filterDateFrom.value || filterDateTo.value,
 );
 
 const filtered = computed(() =>
   store.amendements.filter((a) => {
-    if (filterExploitation.value) {
-      if ((a.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) return false;
-    }
-    if (filterProduct.value) {
-      if ((a.amendement?.amendment_name ?? '') !== filterProduct.value) return false;
-    }
+    if (filterExploitation.value && (a.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) return false;
+    if (filterSole.value && (a.board?.sole?.sole_name ?? '') !== filterSole.value) return false;
+    if (filterBoard.value && (a.board?.board_name ?? '') !== filterBoard.value) return false;
+    if (filterProduct.value && (a.amendement?.amendment_name ?? '') !== filterProduct.value) return false;
     if (filterDateFrom.value && a.amendment_date.slice(0, 10) < filterDateFrom.value) return false;
     if (filterDateTo.value && a.amendment_date.slice(0, 10) > filterDateTo.value) return false;
     return true;
@@ -409,9 +448,77 @@ const filtered = computed(() =>
 
 function resetFilters() {
   filterExploitation.value = '';
+  filterSole.value = '';
+  filterBoard.value = '';
   filterProduct.value = '';
   filterDateFrom.value = '';
   filterDateTo.value = '';
+}
+
+// ── Exports ───────────────────────────────────────────────────────────────────
+function exportCsv() {
+  const rows = filtered.value;
+  if (!rows.length) return;
+  const header = ['Date', 'Exploitation', 'Sole', 'Planche', 'Produit', 'Quantité', 'Unité', 'Notes'];
+  const lines = rows.map((a) => [
+    a.amendment_date.slice(0, 10),
+    a.board?.sole?.exploitation?.exploitation_name ?? '',
+    a.board?.sole?.sole_name ?? '',
+    a.board?.board_name ?? '',
+    a.amendement?.amendment_name ?? '',
+    a.quantity ?? '',
+    a.quantity_unit ?? '',
+    (a.description ?? '').replace(/;/g, ','),
+  ].join(';'));
+  const csv = [header.join(';'), ...lines].join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fertilisations-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportPdf() {
+  const rows = filtered.value;
+  if (!rows.length) return;
+  const fmt = (d: string) => new Date(d).toLocaleDateString('fr-FR');
+  const bodyRows = rows.map((a) => `
+    <tr>
+      <td>${fmt(a.amendment_date)}</td>
+      <td>${a.board?.sole?.exploitation?.exploitation_name ?? '—'}</td>
+      <td>${a.board?.sole?.sole_name ?? '—'}</td>
+      <td>${a.board?.board_name ?? '—'}</td>
+      <td>${a.amendement?.amendment_name ?? '—'}</td>
+      <td>${a.quantity ? `${a.quantity} ${a.quantity_unit ?? ''}` : '—'}</td>
+      <td>${a.description ?? '—'}</td>
+    </tr>`).join('');
+  const html = `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"/>
+<title>Fertilisations</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9.5pt; color: #1a2e1a; padding: 20px; }
+  h1 { font-size: 15pt; color: #2d5016; margin-bottom: 4px; }
+  .meta { color: #666; font-size: 8pt; margin-bottom: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+  th { background: #2d5016; color: #fff; padding: 5px 7px; text-align: left; }
+  td { padding: 4px 7px; border-bottom: 1px solid #e8f0e0; }
+  tr:nth-child(even) td { background: #f5faf0; }
+  @media print { @page { margin: 1.5cm; size: A4 landscape; } }
+</style></head><body>
+<h1>Fertilisations</h1>
+<div class="meta">Exporté le ${new Date().toLocaleDateString('fr-FR')} · ${rows.length} enregistrement(s)</div>
+<table><thead><tr>
+  <th>Date</th><th>Exploitation</th><th>Sole</th><th>Planche</th><th>Produit</th><th>Quantité</th><th>Notes</th>
+</tr></thead><tbody>${bodyRows}</tbody></table>
+</body></html>`;
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 400);
 }
 
 // ── Notice détail ─────────────────────────────────────────────────────────────
@@ -713,6 +820,14 @@ function formatDate(d: string): string {
   color: var(--text-primary);
 }
 
+.filter-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-end;
+  align-self: flex-end;
+  flex-wrap: wrap;
+}
+
 .reset-btn {
   padding: 0.55rem 1rem;
   border-radius: 12px;
@@ -722,8 +837,24 @@ function formatDate(d: string): string {
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
-  align-self: flex-end;
 }
+
+.btn-export {
+  padding: 0.55rem 1rem;
+  border-radius: 12px;
+  border: 1.5px solid rgba(39, 65, 53, 0.18);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms, border-color 150ms;
+}
+.btn-export:hover { background: rgba(74, 103, 65, 0.08); border-color: rgba(74, 103, 65, 0.3); }
+.btn-export:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-export-pdf { border-color: rgba(180, 120, 0, 0.25); color: #7a5600; }
+.btn-export-pdf:hover { background: rgba(180, 120, 0, 0.08); border-color: rgba(180, 120, 0, 0.4); }
 
 /* Table */
 .table-wrapper {

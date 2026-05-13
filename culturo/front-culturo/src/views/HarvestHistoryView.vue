@@ -23,9 +23,30 @@
     <div class="filter-bar">
       <div class="filter-group">
         <label>Exploitation</label>
-        <select v-model="filterExploitation">
+        <select v-model="filterExploitation" @change="filterSole = ''">
           <option value="">Toutes</option>
           <option v-for="name in exploitationNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Sole</label>
+        <select v-model="filterSole" @change="filterBoard = ''">
+          <option value="">Toutes les soles</option>
+          <option v-for="name in filteredSoleNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Planche</label>
+        <select v-model="filterBoard" @change="filterSection = ''">
+          <option value="">Toutes</option>
+          <option v-for="name in filteredBoardNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Section</label>
+        <select v-model="filterSection">
+          <option value="">Toutes</option>
+          <option v-for="n in filteredSectionNumbers" :key="n" :value="String(n)">Section {{ n }}</option>
         </select>
       </div>
       <div class="filter-group">
@@ -40,9 +61,13 @@
         <label>Jusqu'au</label>
         <input v-model="filterDateTo" type="date" />
       </div>
-      <button v-if="hasActiveFilters" type="button" class="reset-btn" @click="resetFilters">
-        Réinitialiser
-      </button>
+      <div class="filter-actions">
+        <button v-if="hasActiveFilters" type="button" class="reset-btn" @click="resetFilters">
+          Réinitialiser
+        </button>
+        <button type="button" class="btn-export" :disabled="filtered.length === 0" @click="exportCsv">↓ CSV</button>
+        <button type="button" class="btn-export btn-export-pdf" :disabled="filtered.length === 0" @click="exportPdf">↓ PDF</button>
+      </div>
     </div>
 
     <!-- Loading / Error -->
@@ -127,13 +152,16 @@ const auth = useAuthStore();
 const canDelete = computed(() => auth.isAdmin || auth.isFormateur);
 
 const filterExploitation = ref('');
+const filterSole = ref('');
+const filterBoard = ref('');
+const filterSection = ref('');
 const filterVegetable = ref('');
 const filterDateFrom = ref('');
 const filterDateTo = ref('');
 const pendingDelete = ref<HarvestRecord | null>(null);
 
 const hasActiveFilters = computed(
-  () => filterExploitation.value || filterVegetable.value || filterDateFrom.value || filterDateTo.value,
+  () => filterExploitation.value || filterSole.value || filterBoard.value || filterSection.value || filterVegetable.value || filterDateFrom.value || filterDateTo.value,
 );
 
 const exploitationNames = computed(() => {
@@ -145,16 +173,46 @@ const exploitationNames = computed(() => {
   return [...names].sort();
 });
 
+const filteredSoleNames = computed(() => {
+  const names = new Set<string>();
+  for (const h of store.harvests) {
+    if (filterExploitation.value && (h.section?.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    const name = h.section?.sectionPlan?.board?.sole?.sole_name;
+    if (name) names.add(name);
+  }
+  return [...names].sort();
+});
+
+const filteredBoardNames = computed(() => {
+  const names = new Set<string>();
+  for (const h of store.harvests) {
+    if (filterExploitation.value && (h.section?.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    if (filterSole.value && (h.section?.sectionPlan?.board?.sole?.sole_name ?? '') !== filterSole.value) continue;
+    const name = h.section?.sectionPlan?.board?.board_name;
+    if (name) names.add(name);
+  }
+  return [...names].sort();
+});
+
+const filteredSectionNumbers = computed(() => {
+  const nums = new Set<number>();
+  for (const h of store.harvests) {
+    if (filterExploitation.value && (h.section?.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    if (filterSole.value && (h.section?.sectionPlan?.board?.sole?.sole_name ?? '') !== filterSole.value) continue;
+    if (filterBoard.value && (h.section?.sectionPlan?.board?.board_name ?? '') !== filterBoard.value) continue;
+    const n = h.section?.section_number;
+    if (n != null) nums.add(n);
+  }
+  return [...nums].sort((a, b) => a - b);
+});
+
 const filtered = computed(() => {
   return store.harvests.filter((h) => {
-    if (filterExploitation.value) {
-      const name = h.section?.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '';
-      if (name !== filterExploitation.value) return false;
-    }
-    if (filterVegetable.value) {
-      const veg = h.section?.vegetable?.vegetable_name ?? '';
-      if (!veg.toLowerCase().includes(filterVegetable.value.toLowerCase())) return false;
-    }
+    if (filterExploitation.value && (h.section?.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) return false;
+    if (filterSole.value && (h.section?.sectionPlan?.board?.sole?.sole_name ?? '') !== filterSole.value) return false;
+    if (filterBoard.value && (h.section?.sectionPlan?.board?.board_name ?? '') !== filterBoard.value) return false;
+    if (filterSection.value && String(h.section?.section_number) !== filterSection.value) return false;
+    if (filterVegetable.value && !(h.section?.vegetable?.vegetable_name ?? '').toLowerCase().includes(filterVegetable.value.toLowerCase())) return false;
     if (filterDateFrom.value && h.harvest_date < filterDateFrom.value) return false;
     if (filterDateTo.value && h.harvest_date > filterDateTo.value) return false;
     return true;
@@ -178,9 +236,53 @@ function formatDate(value: string) {
 
 function resetFilters() {
   filterExploitation.value = '';
+  filterSole.value = '';
+  filterBoard.value = '';
+  filterSection.value = '';
   filterVegetable.value = '';
   filterDateFrom.value = '';
   filterDateTo.value = '';
+}
+
+// ── Exports ───────────────────────────────────────────────────────────────────
+function exportCsv() {
+  const header = ['Date', 'Légume', 'Variété', 'Exploitation', 'Sole', 'Planche', 'Section', 'Quantité', 'Unité'];
+  const rows = filtered.value.map((h) => [
+    h.harvest_date,
+    h.section?.vegetable?.vegetable_name ?? '',
+    h.section?.variety?.variety_name ?? '',
+    h.section?.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '',
+    h.section?.sectionPlan?.board?.sole?.sole_name ?? '',
+    h.section?.sectionPlan?.board?.board_name ?? '',
+    h.section?.section_number ?? '',
+    h.quantity,
+    h.quantity_unit,
+  ]);
+  const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = 'recoltes.csv';
+  a.click();
+}
+
+function exportPdf() {
+  const win = window.open('', '_blank');
+  if (!win) return;
+  const rows = filtered.value.map((h) => `<tr>
+    <td>${h.harvest_date}</td>
+    <td>${h.section?.vegetable?.vegetable_name ?? '—'}</td>
+    <td>${h.section?.variety?.variety_name ?? '—'}</td>
+    <td>${h.section?.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '—'}</td>
+    <td>${h.section?.sectionPlan?.board?.sole?.sole_name ?? '—'}</td>
+    <td>${h.section?.sectionPlan?.board?.board_name ?? '—'}</td>
+    <td>${h.section?.section_number ?? '—'}</td>
+    <td>${h.quantity} ${h.quantity_unit}</td>
+  </tr>`).join('');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Récoltes</title>
+  <style>body{font-family:sans-serif;padding:1.5rem}h1{font-size:1.2rem;margin-bottom:1rem}table{width:100%;border-collapse:collapse;font-size:0.82rem}th,td{padding:0.5rem 0.65rem;border:1px solid #ddd;text-align:left}th{background:#f5f8f0;font-weight:700}</style>
+  </head><body><h1>Récoltes</h1><table><thead><tr><th>Date</th><th>Légume</th><th>Variété</th><th>Exploitation</th><th>Sole</th><th>Planche</th><th>Section</th><th>Quantité</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+  win.document.close();
+  win.print();
 }
 
 function confirmDelete(h: HarvestRecord) {
@@ -305,6 +407,8 @@ onMounted(() => store.loadHarvests());
   color: var(--brand-deep);
 }
 
+.filter-actions { display: flex; align-items: flex-end; gap: 0.5rem; flex-wrap: wrap; }
+
 .reset-btn {
   padding: 0.5rem 0.9rem;
   border-radius: 10px;
@@ -314,13 +418,18 @@ onMounted(() => store.loadHarvests());
   font-weight: 700;
   color: var(--brand-deep);
   cursor: pointer;
-  align-self: flex-end;
   transition: background 140ms;
 }
 
 .reset-btn:hover {
   background: rgba(39, 65, 53, 0.06);
 }
+
+.btn-export { padding: 0.5rem 0.9rem; border-radius: 10px; border: 1.5px solid rgba(39, 65, 53, 0.18); background: rgba(255, 255, 255, 0.85); color: var(--brand-deep); font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: background 140ms; }
+.btn-export:hover:not(:disabled) { background: rgba(39, 65, 53, 0.08); }
+.btn-export:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-export-pdf { color: var(--brand-clay, #b45309); border-color: rgba(180, 83, 9, 0.25); background: rgba(255, 247, 237, 0.85); }
+.btn-export-pdf:hover:not(:disabled) { background: rgba(180, 83, 9, 0.1); }
 
 /* States */
 .state-block {

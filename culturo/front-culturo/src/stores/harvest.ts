@@ -2,6 +2,8 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { harvestsApi } from '@/api/harvests';
 import { usePlanningStore } from '@/stores/planning';
+import { useHarvestDueStore } from '@/stores/harvestDue';
+import { useNotificationsStore } from '@/stores/notifications';
 
 export interface HarvestRecord {
   id_harvest: number;
@@ -55,6 +57,8 @@ export const useHarvestStore = defineStore('harvest', () => {
     harvests.value = harvests.value.filter((h) => h.id_harvest !== id);
     listLoaded.value = false;
     void usePlanningStore().loadCulturePlan();
+    void useHarvestDueStore().load();
+    void useNotificationsStore().fetch();
   }
 
   async function createHarvest(payload: {
@@ -76,6 +80,9 @@ export const useHarvestStore = defineStore('harvest', () => {
       });
       listLoaded.value = false;
       void usePlanningStore().loadCulturePlan();
+      void loadHarvests();
+      void useHarvestDueStore().load();
+      void useNotificationsStore().fetch();
     } catch (err: unknown) {
       const axiosMsg = (err as any)?.response?.data?.message;
       error.value = axiosMsg

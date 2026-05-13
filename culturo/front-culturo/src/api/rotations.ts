@@ -78,4 +78,20 @@ export const rotationsApi = {
       bypass,
     });
   },
+  getHarvestDue(days = 7) {
+    return apiClient.get<HarvestDueEntry[]>('/rotations/harvest-due', { params: { days } });
+  },
 };
+
+export interface HarvestDueEntry {
+  id_section: number;
+  section_number: number;
+  end_date: string;
+  days_left: number;
+  overdue: boolean;
+  vegetable_name: string | null;
+  variety_name: string | null;
+  board_name: string | null;
+  sole_name: string | null;
+  exploitation_name: string | null;
+}

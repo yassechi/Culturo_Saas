@@ -27,12 +27,12 @@
       <!-- Exploitation filter -->
       <div class="filter-group">
         <label>Exploitation</label>
-        <select v-model.number="selectedExploitationId" @change="selectedSoleIdLocal = null">
-          <option :value="null">Toutes</option>
+        <select v-model="exploitationModel">
+          <option value="">Toutes</option>
           <option
             v-for="exp in store.uniqueExploitations"
             :key="exp.id_exploitation"
-            :value="exp.id_exploitation"
+            :value="String(exp.id_exploitation)"
           >{{ exp.exploitation_name }}</option>
         </select>
       </div>
@@ -40,18 +40,37 @@
       <!-- Sole filter -->
       <div class="filter-group">
         <label>Sole</label>
-        <select
-          v-model.number="selectedSoleIdLocal"
-          :disabled="!selectedExploitationId"
-          @change="onSoleChange"
-        >
-          <option :value="null" disabled>Choisir une sole…</option>
+        <select v-model="soleModel">
+          <option value="">Toutes les soles</option>
           <option
             v-for="sole in filteredSoles"
             :key="sole.id_sole"
-            :value="sole.id_sole"
+            :value="String(sole.id_sole)"
           >{{ sole.sole_name }}</option>
         </select>
+      </div>
+
+      <!-- Vegetable filter -->
+      <div class="filter-group">
+        <label>Légume</label>
+        <div class="veg-input-wrap">
+          <input
+            v-model="store.searchQuery"
+            list="veg-suggestions"
+            class="veg-input"
+            placeholder="Tous les légumes…"
+            autocomplete="off"
+          />
+          <button
+            v-if="store.searchQuery"
+            class="veg-clear"
+            type="button"
+            @click="store.searchQuery = ''"
+          >✕</button>
+        </div>
+        <datalist id="veg-suggestions">
+          <option v-for="v in uniqueVegetableNames" :key="v" :value="v" />
+        </datalist>
       </div>
 
       <!-- Year range -->
@@ -68,8 +87,16 @@
         </div>
       </div>
 
-      <!-- Export -->
+      <!-- Search + Export -->
       <div class="export-group">
+        <button
+          class="btn-search"
+          :disabled="isLoading"
+          @click="doSearch"
+        >
+          <span v-if="isLoading">Chargement…</span>
+          <span v-else>Rechercher</span>
+        </button>
         <button
           class="btn-export"
           :disabled="store.filteredEntries.length === 0"
@@ -92,13 +119,20 @@
       {{ store.loadErrors.join(' — ') }}
     </div>
 
-    <!-- No sole selected -->
-    <div v-if="!store.selectedSoleId" class="empty-hero">
-      <div class="empty-icon">🌱</div>
-      <p>Sélectionnez une sole pour afficher son historique de cultures.</p>
+    <!-- Search result banner -->
+    <div v-if="searchDone && !isLoading" class="search-banner" :class="store.filteredEntries.length > 0 ? 'banner-ok' : 'banner-empty'">
+      <span v-if="store.filteredEntries.length > 0">
+        <strong>{{ store.filteredEntries.length }}</strong> résultat(s) trouvé(s)
+        <span v-if="store.searchQuery"> pour "{{ store.searchQuery }}"</span>
+        sur <strong>{{ store.allEntries.length }}</strong> entrée(s) chargée(s)
+      </span>
+      <span v-else>
+        Aucun résultat<span v-if="store.searchQuery"> pour "{{ store.searchQuery }}"</span>.
+        {{ store.allEntries.length === 0 ? 'Aucune donnée pour cette sélection — essayez d\'autres années.' : 'Essayez un autre terme.' }}
+      </span>
     </div>
 
-    <template v-else>
+    <div class="results-area">
       <!-- Loading indicator -->
       <div v-if="isLoading" class="loading-bar">
         <div class="loading-fill" />
@@ -125,16 +159,14 @@
       <!-- ══════════════════════════════════════════════════════════════════ -->
       <section v-if="activeTab === 'history'" class="tab-panel">
         <div class="panel-toolbar">
-          <input
-            v-model="store.searchQuery"
-            class="search-input"
-            placeholder="Rechercher un légume…"
-          />
           <select v-model="store.filterBoard" class="filter-select">
             <option value="">Toutes les planches</option>
             <option v-for="b in store.uniqueBoards" :key="b" :value="b">{{ b }}</option>
           </select>
-          <span class="result-count">{{ store.filteredEntries.length }} ligne(s)</span>
+          <span class="result-count">
+            {{ store.allEntries.length }} entrée(s) chargée(s) —
+            {{ store.filteredEntries.length }} affichée(s)
+          </span>
         </div>
 
         <div class="table-wrap">
@@ -142,6 +174,8 @@
             <thead>
               <tr>
                 <th>Année</th>
+                <th>Exploitation</th>
+                <th>Sole</th>
                 <th>Planche</th>
                 <th>Section</th>
                 <th>Légume</th>
@@ -159,6 +193,8 @@
                 <td>
                   <span class="year-badge" :style="yearColor(entry.year)">{{ entry.year }}</span>
                 </td>
+                <td class="text-muted">{{ entry.exploitationName }}</td>
+                <td class="fw-600">{{ entry.soleName }}</td>
                 <td class="fw-600">{{ entry.boardName }}</td>
                 <td class="center">{{ entry.sectionNumber }}</td>
                 <td class="fw-700">{{ entry.vegetableName }}</td>
@@ -171,7 +207,14 @@
         </div>
 
         <div v-if="store.filteredEntries.length === 0 && !isLoading" class="empty-state">
-          Aucune culture enregistrée pour cette sélection.
+          <template v-if="store.allEntries.length === 0">
+            Aucune donnée chargée pour les années sélectionnées.
+            <br />
+            <span class="empty-hint">Essayez d'activer des années antérieures dans "Années analysées".</span>
+          </template>
+          <template v-else>
+            Aucune culture correspondant au filtre "{{ store.searchQuery || store.filterBoard }}".
+          </template>
         </div>
       </section>
 
@@ -263,15 +306,17 @@
           </div>
         </div>
       </section>
-    </template>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useHistoryStore } from '@/stores/history';
+import { useBotanicalStore } from '@/stores/botanical';
 
 const store = useHistoryStore();
+const botanical = useBotanicalStore();
 const activeTab = ref<'history' | 'memory' | 'alerts'>('history');
 
 const tabs = [
@@ -280,27 +325,55 @@ const tabs = [
   { key: 'alerts' as const, label: 'Alertes rotation' },
 ];
 
-// Local filter state (not in store, just for UI cascade)
-const selectedExploitationId = ref<number | null>(null);
-const selectedSoleIdLocal = ref<number | null>(null);
+// v-model pour exploitation: string <-> number|null
+const exploitationModel = computed({
+  get: () => store.selectedExploitationId != null ? String(store.selectedExploitationId) : '',
+  set: (val: string) => {
+    store.selectExploitation(val ? Number(val) : null);
+  },
+});
+
+// v-model pour sole: string <-> number|null
+const soleModel = computed({
+  get: () => store.selectedSoleId != null ? String(store.selectedSoleId) : '',
+  set: (val: string) => {
+    if (val) {
+      store.selectSole(Number(val));
+    } else {
+      // "Toutes les soles" sélectionné — recharger pour l'exploitation active
+      store.clearSole();
+    }
+  },
+});
 
 const filteredSoles = computed(() =>
-  selectedExploitationId.value
-    ? store.soles.filter((s) => s.exploitation?.id_exploitation === selectedExploitationId.value)
+  store.selectedExploitationId
+    ? store.soles.filter((s) => s.exploitation?.id_exploitation === store.selectedExploitationId)
     : store.soles,
 );
 
-// Available years: 5 years back to current
+const uniqueVegetableNames = computed(() =>
+  [...botanical.vegetables.map((v) => v.vegetable_name)].sort(),
+);
+
+// Available years: 8 years back to current
 const currentYear = new Date().getFullYear();
-const availableYears = Array.from({ length: 5 }, (_, i) => currentYear - 4 + i);
+const availableYears = Array.from({ length: 8 }, (_, i) => currentYear - 7 + i);
 
 const isLoading = computed(() => store.loadingYears.size > 0);
+const searchDone = ref(false);
 
-function onSoleChange() {
-  if (selectedSoleIdLocal.value) store.selectSole(selectedSoleIdLocal.value);
+async function doSearch() {
+  searchDone.value = false;
+  await store.loadAllSelectedYears(true);
+  searchDone.value = true;
+  activeTab.value = 'history';
 }
 
-onMounted(() => store.loadSoles());
+onMounted(async () => {
+  await store.loadSoles();
+  store.loadAllSelectedYears();
+});
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -453,6 +526,36 @@ h1 {
 
 .filter-group select:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.veg-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.veg-input {
+  padding: 0.65rem 2rem 0.65rem 0.9rem;
+  border: 1px solid rgba(39,65,53,0.14);
+  border-radius: 12px;
+  font-size: 0.88rem;
+  background: rgba(255,255,255,0.94);
+  color: var(--text-primary);
+  min-width: 180px;
+}
+
+.veg-clear {
+  position: absolute;
+  right: 0.5rem;
+  border: none;
+  background: none;
+  color: rgba(39,65,53,0.4);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.2rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+.veg-clear:hover { color: var(--text-primary); }
+
 .year-filter { flex: 1; min-width: 240px; }
 
 .year-chips {
@@ -499,6 +602,27 @@ h1 {
 .btn-export-pdf:hover { background: rgba(180,120,0,0.08); border-color: rgba(180,120,0,0.4); }
 
 .export-group { display: flex; gap: 0.5rem; align-self: flex-end; }
+
+.btn-search {
+  padding: 0.65rem 1.4rem;
+  border-radius: 12px;
+  border: none;
+  background: rgba(74,103,65,0.85);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 160ms;
+}
+.btn-search:hover { background: rgba(74,103,65,1); }
+.btn-search:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.results-area {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
 
 /* ── Tabs ─────────────────────────────────────────────────────────────────── */
 .tab-bar {
@@ -614,6 +738,7 @@ h1 {
 .fw-700 { font-weight: 700; }
 .center { text-align: center; }
 .mono { font-variant-numeric: tabular-nums; }
+.text-muted { color: rgba(39,65,53,0.45); font-size: 0.82rem; }
 
 .year-badge {
   display: inline-block;
@@ -796,6 +921,12 @@ h1 {
   padding: 3rem 1rem;
   color: rgba(39,65,53,0.45);
   font-size: 0.9rem;
+  line-height: 1.8;
+}
+
+.empty-hint {
+  font-size: 0.82rem;
+  color: rgba(39,65,53,0.35);
 }
 
 .global-error {
@@ -805,6 +936,23 @@ h1 {
   border: 1px solid rgba(200,60,60,0.2);
   color: #b94040;
   font-size: 0.88rem;
+}
+
+.search-banner {
+  padding: 0.75rem 1.2rem;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.banner-ok {
+  background: rgba(74,140,65,0.1);
+  border: 1px solid rgba(74,140,65,0.25);
+  color: rgba(39,65,53,0.85);
+}
+.banner-empty {
+  background: rgba(200,130,30,0.08);
+  border: 1px solid rgba(200,130,30,0.2);
+  color: rgba(120,70,0,0.85);
 }
 
 .loading-bar {

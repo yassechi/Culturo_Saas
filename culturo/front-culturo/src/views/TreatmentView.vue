@@ -47,9 +47,23 @@
     <div class="filter-bar">
       <div class="filter-group">
         <label>Exploitation</label>
-        <select v-model="filterExploitation">
+        <select v-model="filterExploitation" @change="filterSole = ''">
           <option value="">Toutes</option>
           <option v-for="name in exploitationNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Sole</label>
+        <select v-model="filterSole" @change="filterBoard = ''">
+          <option value="">Toutes les soles</option>
+          <option v-for="name in filteredSoleNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Planche</label>
+        <select v-model="filterBoard">
+          <option value="">Toutes</option>
+          <option v-for="name in filteredBoardNames" :key="name" :value="name">{{ name }}</option>
         </select>
       </div>
       <div class="filter-group">
@@ -67,9 +81,13 @@
         <label>Jusqu'au</label>
         <input v-model="filterDateTo" type="date" />
       </div>
-      <button v-if="hasFilters" type="button" class="reset-btn" @click="resetFilters">
-        Réinitialiser
-      </button>
+      <div class="filter-actions">
+        <button v-if="hasFilters" type="button" class="reset-btn" @click="resetFilters">
+          Réinitialiser
+        </button>
+        <button type="button" class="btn-export" :disabled="filtered.length === 0" @click="exportCsv">↓ CSV</button>
+        <button type="button" class="btn-export btn-export-pdf" :disabled="filtered.length === 0" @click="exportPdf">↓ PDF</button>
+      </div>
     </div>
 
     <div v-if="store.listLoading" class="state-block">Chargement…</div>
@@ -321,6 +339,8 @@ const boardSummaries = computed(() => {
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
 const filterExploitation = ref('');
+const filterSole = ref('');
+const filterBoard = ref('');
 const filterProduct = ref('');
 const filterDateFrom = ref('');
 const filterDateTo = ref('');
@@ -330,20 +350,79 @@ const exploitationNames = computed(() => {
   store.treatments.forEach((t) => { const n = t.board?.sole?.exploitation?.exploitation_name; if (n) s.add(n); });
   return [...s].sort();
 });
+const filteredSoleNames = computed(() => {
+  const s = new Set<string>();
+  for (const t of store.treatments) {
+    if (filterExploitation.value && (t.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    const n = t.board?.sole?.sole_name;
+    if (n) s.add(n);
+  }
+  return [...s].sort();
+});
+const filteredBoardNames = computed(() => {
+  const s = new Set<string>();
+  for (const t of store.treatments) {
+    if (filterExploitation.value && (t.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    if (filterSole.value && (t.board?.sole?.sole_name ?? '') !== filterSole.value) continue;
+    const n = t.board?.board_name;
+    if (n) s.add(n);
+  }
+  return [...s].sort();
+});
 const productNames = computed(() => {
   const s = new Set<string>();
   store.treatments.forEach((t) => { if (t.treatment?.treatment_name) s.add(t.treatment.treatment_name); });
   return [...s].sort();
 });
-const hasFilters = computed(() => filterExploitation.value || filterProduct.value || filterDateFrom.value || filterDateTo.value);
+const hasFilters = computed(() => filterExploitation.value || filterSole.value || filterBoard.value || filterProduct.value || filterDateFrom.value || filterDateTo.value);
 const filtered = computed(() => store.treatments.filter((t) => {
   if (filterExploitation.value && (t.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) return false;
+  if (filterSole.value && (t.board?.sole?.sole_name ?? '') !== filterSole.value) return false;
+  if (filterBoard.value && (t.board?.board_name ?? '') !== filterBoard.value) return false;
   if (filterProduct.value && (t.treatment?.treatment_name ?? '') !== filterProduct.value) return false;
   if (filterDateFrom.value && t.treatment_date.slice(0, 10) < filterDateFrom.value) return false;
   if (filterDateTo.value && t.treatment_date.slice(0, 10) > filterDateTo.value) return false;
   return true;
 }));
-function resetFilters() { filterExploitation.value = ''; filterProduct.value = ''; filterDateFrom.value = ''; filterDateTo.value = ''; }
+function resetFilters() { filterExploitation.value = ''; filterSole.value = ''; filterBoard.value = ''; filterProduct.value = ''; filterDateFrom.value = ''; filterDateTo.value = ''; }
+
+// ── Exports ───────────────────────────────────────────────────────────────────
+function exportCsv() {
+  const header = ['Date', 'Produit', 'Quantité', 'Unité', 'Planche', 'Sole', 'Exploitation', 'Notes'];
+  const rows = filtered.value.map((t) => [
+    t.treatment_date.slice(0, 10),
+    t.treatment?.treatment_name ?? '',
+    t.treatment_quantity ?? '',
+    t.treatment_unit ?? '',
+    t.board?.board_name ?? '',
+    t.board?.sole?.sole_name ?? '',
+    t.board?.sole?.exploitation?.exploitation_name ?? '',
+    t.description ?? '',
+  ]);
+  const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = 'traitements.csv';
+  a.click();
+}
+function exportPdf() {
+  const win = window.open('', '_blank');
+  if (!win) return;
+  const rows = filtered.value.map((t) => `<tr>
+    <td>${t.treatment_date.slice(0, 10)}</td>
+    <td>${t.treatment?.treatment_name ?? '—'}</td>
+    <td>${t.treatment_quantity ? `${t.treatment_quantity} ${t.treatment_unit}` : '—'}</td>
+    <td>${t.board?.board_name ?? '—'}</td>
+    <td>${t.board?.sole?.sole_name ?? '—'}</td>
+    <td>${t.board?.sole?.exploitation?.exploitation_name ?? '—'}</td>
+    <td>${t.description ?? '—'}</td>
+  </tr>`).join('');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Traitements</title>
+  <style>body{font-family:sans-serif;padding:1.5rem}h1{font-size:1.2rem;margin-bottom:1rem}table{width:100%;border-collapse:collapse;font-size:0.82rem}th,td{padding:0.5rem 0.65rem;border:1px solid #ddd;text-align:left}th{background:#f5f0e8;font-weight:700}</style>
+  </head><body><h1>Traitements</h1><table><thead><tr><th>Date</th><th>Produit</th><th>Quantité</th><th>Planche</th><th>Sole</th><th>Exploitation</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+  win.document.close();
+  win.print();
+}
 
 // ── Notice ────────────────────────────────────────────────────────────────────
 const selected = ref<typeof store.treatments[0] | null>(null);
@@ -424,7 +503,13 @@ function formatDate(d: string): string {
 .filter-group { display: flex; flex-direction: column; gap: 0.3rem; min-width: 140px; }
 .filter-group label { font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(39, 65, 53, 0.6); }
 .filter-group input, .filter-group select { padding: 0.55rem 0.85rem; border: 1px solid rgba(39, 65, 53, 0.14); border-radius: 12px; font-size: 0.88rem; background: rgba(255, 255, 255, 0.95); color: var(--text-primary); }
-.reset-btn { padding: 0.55rem 1rem; border-radius: 12px; border: 1px solid rgba(39, 65, 53, 0.18); background: rgba(255, 255, 255, 0.85); color: var(--brand-deep); font-size: 0.82rem; font-weight: 700; cursor: pointer; align-self: flex-end; }
+.filter-actions { display: flex; align-items: flex-end; gap: 0.5rem; flex-wrap: wrap; }
+.reset-btn { padding: 0.55rem 1rem; border-radius: 12px; border: 1px solid rgba(39, 65, 53, 0.18); background: rgba(255, 255, 255, 0.85); color: var(--brand-deep); font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+.btn-export { padding: 0.55rem 0.9rem; border-radius: 12px; border: 1px solid rgba(39, 65, 53, 0.18); background: rgba(255, 255, 255, 0.85); color: var(--brand-deep); font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+.btn-export:hover:not(:disabled) { background: rgba(39, 65, 53, 0.08); }
+.btn-export:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-export-pdf { color: #b45309; border-color: rgba(180, 83, 9, 0.25); background: rgba(255, 247, 237, 0.85); }
+.btn-export-pdf:hover:not(:disabled) { background: rgba(180, 83, 9, 0.1); }
 .table-wrapper { background: rgba(255, 255, 255, 0.82); border: 1px solid rgba(39, 65, 53, 0.08); border-radius: 22px; overflow-x: auto; box-shadow: var(--shadow-soft); }
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .data-table th { padding: 0.75rem 1rem; text-align: left; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(39, 65, 53, 0.55); background: rgba(39, 65, 53, 0.04); border-bottom: 1px solid rgba(39, 65, 53, 0.08); }

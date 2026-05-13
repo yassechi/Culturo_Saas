@@ -19,9 +19,30 @@
     <div class="filter-bar">
       <div class="filter-group">
         <label>Exploitation</label>
-        <select v-model="filterExploitation">
+        <select v-model="filterExploitation" @change="filterSole = ''">
           <option value="">Toutes</option>
           <option v-for="name in exploitationNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Sole</label>
+        <select v-model="filterSole" @change="filterBoard = ''">
+          <option value="">Toutes les soles</option>
+          <option v-for="name in filteredSoleNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Planche</label>
+        <select v-model="filterBoard" @change="filterSection = ''">
+          <option value="">Toutes</option>
+          <option v-for="name in filteredBoardNames" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Section</label>
+        <select v-model="filterSection">
+          <option value="">Toutes</option>
+          <option v-for="n in filteredSectionNumbers" :key="n" :value="String(n)">Section {{ n }}</option>
         </select>
       </div>
       <div class="filter-group">
@@ -32,9 +53,13 @@
         <label>Jusqu'au</label>
         <input v-model="filterDateTo" type="date" />
       </div>
-      <button v-if="hasActiveFilters" type="button" class="reset-btn" @click="resetFilters">
-        Réinitialiser
-      </button>
+      <div class="filter-actions">
+        <button v-if="hasActiveFilters" type="button" class="reset-btn" @click="resetFilters">
+          Réinitialiser
+        </button>
+        <button type="button" class="btn-export" :disabled="filtered.length === 0" @click="exportCsv">↓ CSV</button>
+        <button type="button" class="btn-export btn-export-pdf" :disabled="filtered.length === 0" @click="exportPdf">↓ PDF</button>
+      </div>
     </div>
 
     <!-- Loading / Error -->
@@ -114,6 +139,9 @@ onMounted(() => store.loadAll());
 
 // ── Filtres ──────────────────────────────────────────────────────────────────
 const filterExploitation = ref('');
+const filterSole = ref('');
+const filterBoard = ref('');
+const filterSection = ref('');
 const filterDateFrom = ref('');
 const filterDateTo = ref('');
 
@@ -126,30 +154,98 @@ const exploitationNames = computed(() => {
   return [...set].sort();
 });
 
+const filteredSoleNames = computed(() => {
+  const set = new Set<string>();
+  for (const w of store.waterings) {
+    if (filterExploitation.value && (w.section.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    const name = w.section.sectionPlan?.board?.sole?.sole_name;
+    if (name) set.add(name);
+  }
+  return [...set].sort();
+});
+
+const filteredBoardNames = computed(() => {
+  const set = new Set<string>();
+  for (const w of store.waterings) {
+    if (filterExploitation.value && (w.section.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    if (filterSole.value && (w.section.sectionPlan?.board?.sole?.sole_name ?? '') !== filterSole.value) continue;
+    const name = w.section.sectionPlan?.board?.board_name;
+    if (name) set.add(name);
+  }
+  return [...set].sort();
+});
+
+const filteredSectionNumbers = computed(() => {
+  const set = new Set<number>();
+  for (const w of store.waterings) {
+    if (filterExploitation.value && (w.section.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) continue;
+    if (filterSole.value && (w.section.sectionPlan?.board?.sole?.sole_name ?? '') !== filterSole.value) continue;
+    if (filterBoard.value && (w.section.sectionPlan?.board?.board_name ?? '') !== filterBoard.value) continue;
+    const n = w.section?.section_number;
+    if (n != null) set.add(n);
+  }
+  return [...set].sort((a, b) => a - b);
+});
+
 const hasActiveFilters = computed(
-  () => filterExploitation.value || filterDateFrom.value || filterDateTo.value,
+  () => filterExploitation.value || filterSole.value || filterBoard.value || filterSection.value || filterDateFrom.value || filterDateTo.value,
 );
 
 const filtered = computed(() => {
   return store.waterings.filter((w) => {
-    if (filterExploitation.value) {
-      const name = w.section.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '';
-      if (name !== filterExploitation.value) return false;
-    }
-    if (filterDateFrom.value) {
-      if (w.watering_date.slice(0, 10) < filterDateFrom.value) return false;
-    }
-    if (filterDateTo.value) {
-      if (w.watering_date.slice(0, 10) > filterDateTo.value) return false;
-    }
+    if (filterExploitation.value && (w.section.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '') !== filterExploitation.value) return false;
+    if (filterSole.value && (w.section.sectionPlan?.board?.sole?.sole_name ?? '') !== filterSole.value) return false;
+    if (filterBoard.value && (w.section.sectionPlan?.board?.board_name ?? '') !== filterBoard.value) return false;
+    if (filterSection.value && String(w.section?.section_number) !== filterSection.value) return false;
+    if (filterDateFrom.value && w.watering_date.slice(0, 10) < filterDateFrom.value) return false;
+    if (filterDateTo.value && w.watering_date.slice(0, 10) > filterDateTo.value) return false;
     return true;
   });
 });
 
 function resetFilters() {
   filterExploitation.value = '';
+  filterSole.value = '';
+  filterBoard.value = '';
+  filterSection.value = '';
   filterDateFrom.value = '';
   filterDateTo.value = '';
+}
+
+// ── Exports ───────────────────────────────────────────────────────────────────
+function exportCsv() {
+  const header = ['Date', 'Section', 'Légume', 'Planche', 'Sole', 'Exploitation'];
+  const rows = filtered.value.map((w) => [
+    w.watering_date.slice(0, 16).replace('T', ' '),
+    `Section ${w.section.section_number}`,
+    w.section.vegetable?.vegetable_name ?? '',
+    w.section.sectionPlan?.board?.board_name ?? '',
+    w.section.sectionPlan?.board?.sole?.sole_name ?? '',
+    w.section.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '',
+  ]);
+  const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = 'arrosages.csv';
+  a.click();
+}
+
+function exportPdf() {
+  const win = window.open('', '_blank');
+  if (!win) return;
+  const rows = filtered.value.map((w) => `<tr>
+    <td>${w.watering_date.slice(0, 16).replace('T', ' ')}</td>
+    <td>Section ${w.section.section_number}</td>
+    <td>${w.section.vegetable?.vegetable_name ?? '—'}</td>
+    <td>${w.section.sectionPlan?.board?.board_name ?? '—'}</td>
+    <td>${w.section.sectionPlan?.board?.sole?.sole_name ?? '—'}</td>
+    <td>${w.section.sectionPlan?.board?.sole?.exploitation?.exploitation_name ?? '—'}</td>
+  </tr>`).join('');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Arrosages</title>
+  <style>body{font-family:sans-serif;padding:1.5rem}h1{font-size:1.2rem;margin-bottom:1rem}table{width:100%;border-collapse:collapse;font-size:0.82rem}th,td{padding:0.5rem 0.65rem;border:1px solid #ddd;text-align:left}th{background:#f0f5ff;font-weight:700}</style>
+  </head><body><h1>Arrosages</h1><table><thead><tr><th>Date</th><th>Section</th><th>Légume</th><th>Planche</th><th>Sole</th><th>Exploitation</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+  win.document.close();
+  win.print();
 }
 
 // ── Suppression ───────────────────────────────────────────────────────────────
@@ -291,6 +387,8 @@ function formatDatetime(dateStr: string): string {
   color: var(--text-primary);
 }
 
+.filter-actions { display: flex; align-items: flex-end; gap: 0.5rem; flex-wrap: wrap; }
+
 .reset-btn {
   padding: 0.55rem 1rem;
   border-radius: 12px;
@@ -300,10 +398,15 @@ function formatDatetime(dateStr: string): string {
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
-  align-self: flex-end;
 }
 
 .reset-btn:hover { background: rgba(39, 65, 53, 0.06); }
+
+.btn-export { padding: 0.55rem 0.9rem; border-radius: 12px; border: 1px solid rgba(39, 65, 53, 0.18); background: rgba(255, 255, 255, 0.85); color: var(--brand-deep); font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+.btn-export:hover:not(:disabled) { background: rgba(39, 65, 53, 0.08); }
+.btn-export:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-export-pdf { color: #1a4a8a; border-color: rgba(26, 74, 138, 0.25); background: rgba(235, 244, 255, 0.85); }
+.btn-export-pdf:hover:not(:disabled) { background: rgba(26, 90, 171, 0.1); }
 
 /* Table */
 .table-wrapper {

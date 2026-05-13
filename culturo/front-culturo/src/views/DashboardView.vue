@@ -92,18 +92,61 @@
         <div v-else class="violation-scroll">
           <article
             v-for="alert in dashboard.rotationAlerts"
-            :key="`${alert.boardId}-${alert.familyId}`"
+            :key="`${alert.ruleType}-${alert.boardId}-${alert.familyId}`"
             class="violation-card"
+            :class="`rule-${alert.ruleType ?? 'rotation_5y'}`"
           >
             <div class="violation-head">
               <strong>{{ alert.boardName }}</strong>
-              <span class="violation-badge">{{ alert.familyName }}</span>
+              <div class="violation-tags">
+                <span class="violation-rule-badge" :class="`rule-badge-${alert.ruleType ?? 'rotation_5y'}`">
+                  {{ ruleLabel(alert.ruleType) }}
+                </span>
+                <span v-if="alert.familyName" class="violation-badge">{{ alert.familyName }}</span>
+              </div>
             </div>
             <p>{{ alert.exploitationName ?? 'Exploitation' }}<template v-if="alert.soleName"> · {{ alert.soleName }}</template></p>
-            <small>Replantée le {{ alert.lastCultivationDate ? formatDate(alert.lastCultivationDate) : 'date inconnue' }} — moins de 5 ans après la précédente</small>
+            <small>{{ alert.description ?? ruleDescription(alert) }}</small>
           </article>
         </div>
       </article>
+    </section>
+
+    <!-- Récoltes à faire -->
+    <section class="dashboard-card">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Récoltes</span>
+          <h2>Légumes à récolter (7 prochains jours)</h2>
+        </div>
+        <span class="section-chip" :class="harvestDue.some(h => h.overdue) ? 'chip-urgent' : ''">
+          {{ harvestDue.length }} section(s)
+        </span>
+      </div>
+
+      <div v-if="harvestDueLoading" class="empty-state compact">Chargement…</div>
+      <div v-else-if="harvestDue.length === 0" class="empty-state compact">
+        Aucune récolte prévue dans les 7 prochains jours.
+      </div>
+      <div v-else class="harvest-grid">
+        <article
+          v-for="entry in harvestDue"
+          :key="entry.id_section"
+          class="harvest-card"
+          :class="{ 'harvest-card--overdue': entry.overdue, 'harvest-card--today': entry.days_left === 0 }"
+        >
+          <div class="harvest-head">
+            <strong>{{ entry.vegetable_name ?? 'Légume inconnu' }}</strong>
+            <span class="harvest-badge" :class="entry.overdue ? 'badge-overdue' : entry.days_left === 0 ? 'badge-today' : 'badge-soon'">
+              {{ harvestDayLabel(entry) }}
+            </span>
+          </div>
+          <p v-if="entry.variety_name" class="harvest-variety">{{ entry.variety_name }}</p>
+          <small>
+            {{ entry.exploitation_name }} · {{ entry.sole_name }} · {{ entry.board_name }} · Section {{ entry.section_number }}
+          </small>
+        </article>
+      </div>
     </section>
 
     <section class="content-grid">
@@ -191,15 +234,21 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { useDashboardStore } from '@/stores/dashboard';
+import { useHarvestDueStore } from '@/stores/harvestDue';
+import type { HarvestDueEntry } from '@/api/rotations';
 import type { ObservationRecord, ObservationReviewStatus } from '@/types/observations';
 
 const auth = useAuthStore();
 const dashboard = useDashboardStore();
+const harvestDueStore = useHarvestDueStore();
+const { items: harvestDue, loading: harvestDueLoading } = storeToRefs(harvestDueStore);
 
 onMounted(() => {
   void dashboard.loadDashboard();
+  void harvestDueStore.load();
 });
 
 const displayName = computed(() => {
@@ -288,6 +337,27 @@ function statusClass(status: ObservationReviewStatus) {
     'status-approved': status === 'approved',
     'status-changes': status === 'changes_requested',
   };
+}
+
+function ruleLabel(ruleType?: string) {
+  if (ruleType === 'cohabitation') return 'Cohabitation';
+  if (ruleType === 'fallow') return 'Jachère';
+  return '5 ans';
+}
+
+function ruleDescription(alert: { ruleType?: string; lastCultivationDate?: string | null }) {
+  if (alert.ruleType === 'cohabitation') return 'Plusieurs familles primaires actives sur la même planche';
+  if (alert.ruleType === 'fallow') return 'Jachère recommandée — culture continue depuis 3 ans ou plus';
+  return alert.lastCultivationDate
+    ? `Replantée le ${formatDate(alert.lastCultivationDate)} — moins de 5 ans après la précédente`
+    : 'Violation de la règle des 5 ans';
+}
+
+function harvestDayLabel(entry: HarvestDueEntry): string {
+  if (entry.days_left < 0) return `En retard de ${Math.abs(entry.days_left)} j`;
+  if (entry.days_left === 0) return "Aujourd'hui";
+  if (entry.days_left === 1) return 'Demain';
+  return `Dans ${entry.days_left} j`;
 }
 </script>
 
@@ -482,12 +552,20 @@ function statusClass(status: ObservationReviewStatus) {
 .violation-head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: start;
   gap: 0.75rem;
   margin-bottom: 0.3rem;
 }
 
 .violation-head strong { color: var(--brand-deep); }
+
+.violation-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
 
 .violation-badge {
   padding: 0.25rem 0.6rem;
@@ -496,8 +574,18 @@ function statusClass(status: ObservationReviewStatus) {
   font-weight: 700;
   background: rgba(181, 106, 67, 0.16);
   color: #8b4d2d;
-  flex-shrink: 0;
 }
+
+.violation-rule-badge {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.rule-badge-rotation_5y { background: rgba(181, 106, 67, 0.16); color: #8b4d2d; }
+.rule-badge-cohabitation { background: rgba(103, 58, 183, 0.14); color: #512da8; }
+.rule-badge-fallow { background: rgba(2, 136, 209, 0.12); color: #01579b; }
 
 .violation-card p {
   margin: 0;
@@ -590,6 +678,60 @@ function statusClass(status: ObservationReviewStatus) {
 
 .compact {
   min-height: 170px;
+}
+
+.harvest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.harvest-card {
+  background: rgba(251, 246, 235, 0.7);
+  border: 1px solid rgba(39, 65, 53, 0.12);
+  border-radius: var(--radius-lg);
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.harvest-card--overdue {
+  border-color: rgba(229, 57, 53, 0.4);
+  background: rgba(255, 235, 238, 0.7);
+}
+
+.harvest-card--today {
+  border-color: rgba(230, 81, 0, 0.4);
+  background: rgba(255, 248, 225, 0.8);
+}
+
+.harvest-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.harvest-head strong { color: var(--brand-deep); font-size: 0.95rem; }
+.harvest-variety { margin: 0; font-size: 0.82rem; color: var(--text-muted); }
+.harvest-card small { color: var(--text-muted); font-size: 0.78rem; }
+
+.harvest-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badge-overdue { background: rgba(229, 57, 53, 0.15); color: #c62828; }
+.badge-today   { background: rgba(230, 81, 0, 0.15);  color: #bf360c; }
+.badge-soon    { background: rgba(74, 103, 65, 0.12);  color: #2e5027; }
+
+.chip-urgent {
+  background: rgba(229, 57, 53, 0.15);
+  color: #c62828;
 }
 
 @media (max-width: 1100px) {

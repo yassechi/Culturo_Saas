@@ -7,6 +7,9 @@ import { getConfig } from '@/stores/config';
 
 export interface HistoryEntry extends CulturePlanEntry {
   year: number;
+  soleId: number;
+  soleName: string;
+  exploitationName: string;
 }
 
 export interface RotationAlert {
@@ -31,7 +34,7 @@ export interface ParcelMemoryRow {
 const CURRENT_YEAR = new Date().getFullYear();
 
 function buildDefaultYears(): number[] {
-  const n = getConfig().historyDefaultYears;
+  const n = Math.max(5, getConfig().historyDefaultYears);
   return Array.from({ length: n }, (_, i) => CURRENT_YEAR - (n - 1 - i));
 }
 
@@ -43,22 +46,61 @@ export const useHistoryStore = defineStore('history', () => {
 
   // Filters
   const selectedSoleId = ref<number | null>(null);
+  const selectedExploitationId = ref<number | null>(null);
   const selectedYears = ref<number[]>(buildDefaultYears());
   const searchQuery = ref('');
   const filterBoard = ref<string>('');
 
-  // Data
-  const entriesByYear = ref<Record<number, CulturePlanEntry[]>>({});
-  const loadingYears = ref<Set<number>>(new Set());
+  // Data — keyed by `${soleId}_${year}`
+  const entriesBySoleYear = ref<Record<string, CulturePlanEntry[]>>({});
+  const loadingKeys = ref<Set<string>>(new Set());
   const loadErrors = ref<string[]>([]);
+
+  function soleYearKey(soleId: number, year: number) {
+    return `${soleId}_${year}`;
+  }
+
+  // Which soles are currently "active" based on filters
+  const activeSoleIds = computed((): number[] => {
+    if (selectedSoleId.value) return [selectedSoleId.value];
+    if (selectedExploitationId.value) {
+      return soles.value
+        .filter((s) => s.exploitation?.id_exploitation === selectedExploitationId.value)
+        .map((s) => s.id_sole);
+    }
+    return soles.value.map((s) => s.id_sole);
+  });
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const allEntries = computed<HistoryEntry[]>(() =>
-    selectedYears.value.flatMap((year) =>
-      (entriesByYear.value[year] ?? []).map((e) => ({ ...e, year })),
-    ),
-  );
+  const allEntries = computed<HistoryEntry[]>(() => {
+    // Map avec clé string pour éviter les mismatch number/string venant de l'API
+    const soleMap = new Map(soles.value.map((s) => [String(s.id_sole), s]));
+    return activeSoleIds.value.flatMap((soleId) => {
+      const sole = soleMap.get(String(soleId));
+      const soleName = sole?.sole_name ?? '';
+      const exploitationName = sole?.exploitation?.exploitation_name ?? '';
+      return selectedYears.value.flatMap((year) =>
+        (entriesBySoleYear.value[soleYearKey(soleId, year)] ?? []).map((e) => ({
+          ...e,
+          year,
+          soleId,
+          soleName,
+          exploitationName,
+        })),
+      );
+    });
+  });
+
+  // Still expose selectedSoleId as alias for components that check it
+  const loadingYears = computed(() => {
+    const years = new Set<number>();
+    loadingKeys.value.forEach((k) => {
+      const y = Number(k.split('_')[1]);
+      if (!isNaN(y)) years.add(y);
+    });
+    return years;
+  });
 
   const filteredEntries = computed(() => {
     const q = searchQuery.value.trim().toLowerCase();
@@ -167,32 +209,62 @@ export const useHistoryStore = defineStore('history', () => {
   }
 
   async function loadYearData(soleId: number, year: number) {
-    if (loadingYears.value.has(year)) return;
-    loadingYears.value = new Set([...loadingYears.value, year]);
+    const key = soleYearKey(soleId, year);
+    if (loadingKeys.value.has(key)) return;
+    if (key in entriesBySoleYear.value) return;
+    loadingKeys.value = new Set([...loadingKeys.value, key]);
     try {
       const resp = await apiClient.get<CulturePlanEntry[]>(
         `/rotations/plan/${soleId}`,
         { params: { year } },
       );
-      entriesByYear.value = { ...entriesByYear.value, [year]: resp.data };
+      entriesBySoleYear.value = { ...entriesBySoleYear.value, [key]: resp.data };
     } catch {
       loadErrors.value.push(`Erreur chargement année ${year}.`);
     } finally {
-      const next = new Set(loadingYears.value);
-      next.delete(year);
-      loadingYears.value = next;
+      const next = new Set(loadingKeys.value);
+      next.delete(key);
+      loadingKeys.value = next;
     }
   }
 
-  async function loadAllSelectedYears() {
-    if (!selectedSoleId.value) return;
-    entriesByYear.value = {};
+  async function loadAllSelectedYears(force = false) {
     loadErrors.value = [];
-    await Promise.all(selectedYears.value.map((y) => loadYearData(selectedSoleId.value!, y)));
+    if (force) {
+      const next = { ...entriesBySoleYear.value };
+      activeSoleIds.value.forEach((soleId) => {
+        selectedYears.value.forEach((year) => {
+          delete next[soleYearKey(soleId, year)];
+        });
+      });
+      entriesBySoleYear.value = next;
+    }
+    await Promise.all(
+      activeSoleIds.value.flatMap((soleId) =>
+        selectedYears.value.map((year) => loadYearData(soleId, year)),
+      ),
+    );
   }
 
   function selectSole(id: number) {
     selectedSoleId.value = id;
+    loadAllSelectedYears();
+  }
+
+  function clearSole() {
+    selectedSoleId.value = null;
+    loadAllSelectedYears();
+  }
+
+  function selectExploitation(id: number | null) {
+    selectedExploitationId.value = id;
+    selectedSoleId.value = null;
+    loadAllSelectedYears();
+  }
+
+  function clearFilters() {
+    selectedExploitationId.value = null;
+    selectedSoleId.value = null;
     loadAllSelectedYears();
   }
 
@@ -202,7 +274,7 @@ export const useHistoryStore = defineStore('history', () => {
       selectedYears.value = selectedYears.value.filter((y) => y !== year);
     } else {
       selectedYears.value = [...selectedYears.value, year].sort();
-      if (selectedSoleId.value) loadYearData(selectedSoleId.value, year);
+      activeSoleIds.value.forEach((soleId) => loadYearData(soleId, year));
     }
   }
 
@@ -316,12 +388,12 @@ ${alerts.length > 0 ? `<h2>Alertes de rotation</h2><table><thead><tr><th>Planche
   return {
     soles,
     solesLoading,
-    invalidateSoles: () => { solesLoaded.value = false; entriesByYear.value = {}; },
+    invalidateSoles: () => { solesLoaded.value = false; entriesBySoleYear.value = {}; },
     selectedSoleId,
+    selectedExploitationId,
     selectedYears,
     searchQuery,
     filterBoard,
-    entriesByYear,
     loadingYears,
     loadErrors,
     allEntries,
@@ -334,6 +406,9 @@ ${alerts.length > 0 ? `<h2>Alertes de rotation</h2><table><thead><tr><th>Planche
     loadSoles,
     loadAllSelectedYears,
     selectSole,
+    clearSole,
+    selectExploitation,
+    clearFilters,
     toggleYear,
     setYearRange,
     exportCsv,

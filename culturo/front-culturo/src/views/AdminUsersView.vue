@@ -106,6 +106,7 @@
             <th scope="col">Utilisateur</th>
             <th scope="col">Email</th>
             <th scope="col">Rôle</th>
+            <th scope="col">Formateur</th>
             <th scope="col">Promotion</th>
             <th scope="col">Statut</th>
             <th scope="col" class="col-actions">Actions</th>
@@ -137,12 +138,31 @@
                 class="role-select"
                 :class="`role-select--${store.resolveRoleName(user)}`"
                 :aria-label="`Rôle de ${user.user_first_name}`"
+                :disabled="auth.isFormateur && store.resolveRoleName(user) !== 'stagiaire'"
                 @change="onRoleChange(user, $event)"
               >
                 <option value="admin">Admin</option>
                 <option value="formateur">Formateur</option>
                 <option value="stagiaire">Stagiaire</option>
               </select>
+            </td>
+
+            <!-- Formateur référent -->
+            <td class="cell-formateur">
+              <template v-if="store.resolveRoleName(user) === 'stagiaire'">
+                <select
+                  :value="user.id_formateur ?? ''"
+                  class="formateur-select"
+                  :aria-label="`Formateur de ${user.user_first_name}`"
+                  @change="assignFormateur(user, $event)"
+                >
+                  <option value="">— Aucun —</option>
+                  <option v-for="f in formateurs" :key="f.id_user" :value="f.id_user">
+                    {{ f.user_first_name }} {{ f.user_last_name }}
+                  </option>
+                </select>
+              </template>
+              <span v-else class="cell-dash">—</span>
             </td>
 
             <!-- Promotion -->
@@ -291,6 +311,20 @@
               </div>
             </div>
 
+            <div v-if="store.modalForm.role === 'stagiaire'" class="form-field">
+              <label for="u-formateur">Formateur référent</label>
+              <select
+                id="u-formateur"
+                :value="store.modalForm.id_formateur ?? ''"
+                @change="store.modalForm.id_formateur = ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null"
+              >
+                <option value="">— Aucun —</option>
+                <option v-for="f in formateurs" :key="f.id_user" :value="f.id_user">
+                  {{ f.user_first_name }} {{ f.user_last_name }}
+                </option>
+              </select>
+            </div>
+
             <div class="form-field">
               <label for="u-password">
                 {{ store.modalMode === 'create' ? 'Mot de passe *' : 'Nouveau mot de passe (laisser vide pour ne pas changer)' }}
@@ -326,10 +360,12 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onActivated } from 'vue';
-import { useAdminUsersStore, type RoleName } from '@/stores/adminUsers';
+import { useAdminUsersStore, type RoleName, ROLE_ID } from '@/stores/adminUsers';
+import { useAuthStore } from '@/stores/auth';
 import type { ApiUser } from '@/api/admin';
 
 const store = useAdminUsersStore();
+const auth = useAuthStore();
 
 function users_in_group(groupId: number): number {
   return store.users.filter((u) => u.id_group === groupId).length;
@@ -362,6 +398,10 @@ const modalTitle = computed(() =>
   store.modalMode === 'create' ? 'Créer un compte utilisateur' : 'Modifier le compte',
 );
 
+const formateurs = computed(() =>
+  store.users.filter((u) => u.id_role === ROLE_ID.formateur),
+);
+
 function initials(user: ApiUser): string {
   return `${user.user_first_name?.[0] ?? ''}${user.user_last_name?.[0] ?? ''}`.toUpperCase();
 }
@@ -369,6 +409,12 @@ function initials(user: ApiUser): string {
 function onRoleChange(user: ApiUser, event: Event) {
   const role = (event.target as HTMLSelectElement).value as RoleName;
   store.changeRole(user, role);
+}
+
+async function assignFormateur(user: ApiUser, event: Event) {
+  const val = (event.target as HTMLSelectElement).value;
+  const id_formateur = val ? Number(val) : null;
+  await store.assignUserFormateur(user.id_user, id_formateur);
 }
 </script>
 
@@ -840,6 +886,20 @@ function onRoleChange(user: ApiUser, event: Event) {
   .form-row { grid-template-columns: 1fr; }
   .toolbar { flex-direction: column; align-items: stretch; }
 }
+
+/* ── Formateur column ──────────────────────────────────────────────────────── */
+.cell-formateur { width: 160px; }
+.formateur-select {
+  font-size: 0.8rem;
+  padding: 4px 6px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(21,101,192,0.25);
+  background: rgba(227,242,253,0.6);
+  color: #0d47a1;
+  cursor: pointer;
+  width: 100%;
+}
+.cell-dash { color: #bbb; font-size: 0.9rem; }
 
 /* ── Promotion column ──────────────────────────────────────────────────────── */
 .cell-group { width: 140px; }

@@ -6,7 +6,9 @@ import {
   IsNumber,
   IsBoolean,
   IsDateString,
+  ValidateIf,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 export class UpdateUserDTO {
   @IsNumber()
   @ApiProperty({ description: 'User ID' })
@@ -56,4 +58,11 @@ export class UpdateUserDTO {
   @IsNumber()
   @ApiProperty({ description: 'User role ID' })
   id_role?: number;
+
+  @IsOptional()
+  @ValidateIf((o) => o.id_formateur !== null)
+  @IsNumber()
+  @Transform(({ value }) => (value === null ? null : value === undefined ? undefined : Number(value)))
+  @ApiProperty({ description: 'Formateur ID (null to unassign)', nullable: true })
+  id_formateur?: number | null;
 }

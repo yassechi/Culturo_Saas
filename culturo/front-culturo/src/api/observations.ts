@@ -33,4 +33,8 @@ export const observationsApi = {
   reviewObservation(id: number, payload: ReviewObservationPayload) {
     return apiClient.patch<ObservationRecord>(`/observations/${id}/review`, payload);
   },
+
+  markAllSeen() {
+    return apiClient.patch<{ ok: boolean }>('/observations/mark-seen');
+  },
 };

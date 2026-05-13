@@ -11,7 +11,7 @@ export interface AppConfig {
 
 const DEFAULTS: AppConfig = {
   planningWindowStep: 3,
-  historyDefaultYears: 3,
+  historyDefaultYears: 5,
   defaultSectionsPerBoard: 3,
 };
 

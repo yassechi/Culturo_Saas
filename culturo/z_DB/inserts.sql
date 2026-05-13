@@ -256,7 +256,8 @@ BEGIN
         last_end_dates[section_number] := end_date;
 
         quantity_planted := 40 + floor(random() * 161)::int;
-        vegetable_id := 1 + floor(random() * 20)::int;
+        -- N'utiliser que des légumes non-primaires pour éviter les violations accidentelles de rotation
+        vegetable_id := (ARRAY[1,3,9,10,11,12,13,14,15,16,17,18,19,20])[1 + floor(random() * 14)::int];
 
         INSERT INTO section (
           section_number,
@@ -282,6 +283,64 @@ BEGIN
       END LOOP;
     END LOOP;
   END LOOP;
+END $$;
+
+-- =====================================================
+-- 13b. SCÉNARIOS DE VIOLATION (contrôlés)
+-- =====================================================
+DO $$
+DECLARE
+  plan_id_5y_a int;
+  plan_id_5y_b int;
+  plan_id_cohab int;
+BEGIN
+  -- ── VIOLATION 5 ANS ──────────────────────────────────────────────────────
+  -- Solanacees (Tomate, id=2) plantée sur N1 (id_board=1) en 2022, puis de
+  -- nouveau en 2025 : écart de 3 ans < 5 ans → une seule violation détectée.
+
+  INSERT INTO section_plan (creation_date, number_of_section, section_plan_active, id_board)
+  VALUES ('2022-02-01', 3, TRUE, 1)
+  RETURNING id_section_plan INTO plan_id_5y_a;
+
+  INSERT INTO section (
+    section_number, start_date, end_date,
+    quantity_planted, unity, section_active,
+    "sectionPlanIdSectionPlan", id_vegetable
+  ) VALUES (
+    1, '2022-03-01', '2022-08-01',
+    60, 'unit', FALSE,
+    plan_id_5y_a, 2
+  );
+
+  INSERT INTO section_plan (creation_date, number_of_section, section_plan_active, id_board)
+  VALUES ('2025-02-01', 3, TRUE, 1)
+  RETURNING id_section_plan INTO plan_id_5y_b;
+
+  INSERT INTO section (
+    section_number, start_date, end_date,
+    quantity_planted, unity, section_active,
+    "sectionPlanIdSectionPlan", id_vegetable
+  ) VALUES (
+    1, '2025-03-01', '2025-09-01',
+    55, 'unit', FALSE,
+    plan_id_5y_b, 2
+  );
+
+  -- ── COHABITATION ─────────────────────────────────────────────────────────
+  -- N2 (id_board=2) : Tomate (Solanacees/primaire) + Brocoli (Cruciferes/primaire)
+  -- actives simultanément → cohabitation de familles primaires.
+
+  INSERT INTO section_plan (creation_date, number_of_section, section_plan_active, id_board)
+  VALUES (CURRENT_DATE - 30, 3, TRUE, 2)
+  RETURNING id_section_plan INTO plan_id_cohab;
+
+  INSERT INTO section (
+    section_number, start_date, end_date,
+    quantity_planted, unity, section_active,
+    "sectionPlanIdSectionPlan", id_vegetable
+  ) VALUES
+    (1, CURRENT_DATE - 25, CURRENT_DATE + 55, 50, 'unit', TRUE, plan_id_cohab, 2),  -- Tomate
+    (2, CURRENT_DATE - 20, CURRENT_DATE + 50, 40, 'unit', TRUE, plan_id_cohab, 8);  -- Brocoli
 END $$;
 
 -- =====================================================

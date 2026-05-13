@@ -31,7 +31,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   const rotationAlerts = computed(() =>
     (summary.value?.rotations.alerts ?? []).filter(
-      (a) => !dismissedAlerts.value.has(`${a.boardId}-${a.familyId}`),
+      (a) => !dismissedAlerts.value.has(`${a.ruleType ?? 'rotation_5y'}-${a.boardId}-${a.familyId}`),
     ),
   );
 

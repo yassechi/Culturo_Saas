@@ -245,7 +245,9 @@ const isFormValid = computed(
 
 onMounted(() => {
   store.clearMessages();
-  void Promise.all([store.loadActiveSections(), store.loadMyObservations()]);
+  void Promise.all([store.loadActiveSections(), store.loadMyObservations()]).then(() => {
+    void store.markAllSeen();
+  });
 });
 
 function resetForm() {

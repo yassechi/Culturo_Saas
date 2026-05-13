@@ -19,6 +19,8 @@ type DashboardRotationAlert = {
   familyName: string;
   lastCultivationDate: Date | null;
   activeThisYear: boolean;
+  ruleType: 'rotation_5y' | 'cohabitation' | 'fallow';
+  description?: string;
 };
 
 type DashboardContributor = {
@@ -42,11 +44,16 @@ export class StatisticsService {
   ) {}
 
   async getDashboardSummary(payload: JWTPayloadType) {
-    const [planning, observations, rotations] = await Promise.all([
+    const [planning, observations, rotationArrays] = await Promise.all([
       this.computePlanningSummary(),
       this.computeObservationSummary(payload),
-      this.computeRotationAlerts(),
+      Promise.all([
+        this.computeRotation5yAlerts(),
+        this.computeCohabitationAlerts(),
+      ]),
     ]);
+
+    const rotations = rotationArrays.flat();
 
     return {
       generatedAt: new Date().toISOString(),
@@ -199,7 +206,7 @@ export class StatisticsService {
     };
   }
 
-  private async computeRotationAlerts(): Promise<DashboardRotationAlert[]> {
+  private async computeRotation5yAlerts(): Promise<DashboardRotationAlert[]> {
     // Fetch all sections with a primary family, no date filter — we compare dates ourselves
     const sections = await this.sectionRepository
       .createQueryBuilder('section')
@@ -261,6 +268,8 @@ export class StatisticsService {
         familyName: family.family_name,
         lastCultivationDate: violationDate,
         activeThisYear: false,
+        ruleType: 'rotation_5y',
+        description: `Replantée moins de 5 ans après la précédente culture de la même famille`,
       });
     }
 
@@ -269,5 +278,110 @@ export class StatisticsService {
       const bTime = b.lastCultivationDate ? new Date(b.lastCultivationDate).getTime() : 0;
       return bTime - aTime;
     });
+  }
+
+  private async computeCohabitationAlerts(): Promise<DashboardRotationAlert[]> {
+    const sections = await this.sectionRepository
+      .createQueryBuilder('section')
+      .leftJoinAndSelect('section.vegetable', 'vegetable')
+      .leftJoinAndSelect('vegetable.family', 'family')
+      .leftJoinAndSelect('family.family_importance', 'familyImportance')
+      .leftJoinAndSelect('section.sectionPlan', 'sectionPlan')
+      .leftJoinAndSelect('sectionPlan.board', 'board')
+      .leftJoinAndSelect('board.sole', 'sole')
+      .leftJoinAndSelect('sole.exploitation', 'exploitation')
+      .where('section.section_active = TRUE')
+      .andWhere('board.board_active = TRUE')
+      .andWhere('familyImportance.importance_name = :importance', { importance: 'primaire' })
+      .getMany();
+
+    const boardFamilies = new Map<number, { board: Board; names: string[] }>();
+
+    for (const section of sections) {
+      if (!section.vegetable?.family || !section.sectionPlan?.board) continue;
+      const board = section.sectionPlan.board;
+      const familyName = section.vegetable.family.family_name;
+
+      if (!boardFamilies.has(board.id_board)) {
+        boardFamilies.set(board.id_board, { board, names: [] });
+      }
+      const entry = boardFamilies.get(board.id_board)!;
+      if (!entry.names.includes(familyName)) entry.names.push(familyName);
+    }
+
+    const violations: DashboardRotationAlert[] = [];
+    for (const { board, names } of boardFamilies.values()) {
+      if (names.length < 2) continue;
+      const label = names.join(' + ');
+      violations.push({
+        boardId: board.id_board,
+        boardName: board.board_name,
+        soleName: board.sole?.sole_name ?? null,
+        exploitationName: board.sole?.exploitation?.exploitation_name ?? null,
+        familyId: 0,
+        familyName: label,
+        lastCultivationDate: null,
+        activeThisYear: true,
+        ruleType: 'cohabitation',
+        description: `Plusieurs familles primaires actives simultanément : ${label}`,
+      });
+    }
+    return violations;
+  }
+
+  private async computeFallowAlerts(): Promise<DashboardRotationAlert[]> {
+    const sections = await this.sectionRepository
+      .createQueryBuilder('section')
+      .leftJoinAndSelect('section.sectionPlan', 'sectionPlan')
+      .leftJoinAndSelect('sectionPlan.board', 'board')
+      .leftJoinAndSelect('board.sole', 'sole')
+      .leftJoinAndSelect('sole.exploitation', 'exploitation')
+      .where('board.board_active = TRUE')
+      .select([
+        'section.id_section',
+        'section.start_date',
+        'sectionPlan.id_section_plan',
+        'board.id_board',
+        'board.board_name',
+        'sole.sole_name',
+        'exploitation.exploitation_name',
+      ])
+      .getMany();
+
+    const boardYears = new Map<number, { board: Board; years: Set<number> }>();
+    for (const section of sections) {
+      const board = section.sectionPlan?.board;
+      if (!board || !section.start_date) continue;
+      const year = new Date(section.start_date).getFullYear();
+      if (!boardYears.has(board.id_board)) {
+        boardYears.set(board.id_board, { board, years: new Set() });
+      }
+      boardYears.get(board.id_board)!.years.add(year);
+    }
+
+    const currentYear = new Date().getFullYear();
+    const violations: DashboardRotationAlert[] = [];
+
+    for (const { board, years } of boardYears.values()) {
+      let consecutive = 0;
+      for (let y = currentYear; years.has(y); y--) {
+        consecutive++;
+      }
+      if (consecutive >= 3) {
+        violations.push({
+          boardId: board.id_board,
+          boardName: board.board_name,
+          soleName: board.sole?.sole_name ?? null,
+          exploitationName: board.sole?.exploitation?.exploitation_name ?? null,
+          familyId: 0,
+          familyName: 'Jachère recommandée',
+          lastCultivationDate: null,
+          activeThisYear: true,
+          ruleType: 'fallow',
+          description: `${consecutive} années de culture consécutives — une jachère est recommandée`,
+        });
+      }
+    }
+    return violations;
   }
 }

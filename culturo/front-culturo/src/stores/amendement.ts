@@ -88,6 +88,7 @@ export const useAmendementStore = defineStore('amendement', () => {
         description: payload.description,
       });
       listLoaded.value = false;
+      void loadAll();
     } catch {
       submitError.value = 'Erreur lors de l\'enregistrement de la fertilisation.';
       throw new Error(submitError.value);
@@ -116,6 +117,7 @@ export const useAmendementStore = defineStore('amendement', () => {
         description: payload.description,
       });
       listLoaded.value = false;
+      void loadAll();
     } catch {
       submitError.value = 'Erreur lors de la fertilisation en masse.';
       throw new Error(submitError.value);

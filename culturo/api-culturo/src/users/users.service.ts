@@ -34,7 +34,7 @@ export class UsersService {
    * @returns
    */
   async getAllUsers(): Promise<User_[]> {
-    return await this.userRepository.find({ relations: ['role'] });
+    return await this.userRepository.find({ relations: ['role', 'formateur'] });
   }
 
   /**
@@ -135,6 +135,10 @@ export class UsersService {
 
     if (updateData.user_active !== undefined)
       user.user_active = updateData.user_active;
+
+    if ('id_formateur' in updateData) {
+      user.id_formateur = updateData.id_formateur ?? null;
+    }
 
     await this.userRepository.save(user);
 

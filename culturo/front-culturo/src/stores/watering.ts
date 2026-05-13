@@ -68,6 +68,7 @@ export const useWateringStore = defineStore('watering', () => {
     try {
       await wateringsApi.create({ id_section: sectionId, watering_date: datetime });
       listLoaded.value = false;
+      void loadAll();
       await loadBySection(sectionId);
     } catch {
       submitError.value = 'Erreur lors de l\'enregistrement de l\'arrosage.';
@@ -87,6 +88,7 @@ export const useWateringStore = defineStore('watering', () => {
         sole_id: payload.soleId,
       });
       listLoaded.value = false;
+      void loadAll();
     } catch {
       submitError.value = 'Erreur lors de l\'arrosage en masse.';
       throw new Error(submitError.value);
