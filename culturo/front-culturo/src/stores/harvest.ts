@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
+import { isAxiosError } from 'axios';
 import { harvestsApi } from '@/api/harvests';
 import { usePlanningStore } from '@/stores/planning';
 import { useHarvestDueStore } from '@/stores/harvestDue';
@@ -84,7 +85,7 @@ export const useHarvestStore = defineStore('harvest', () => {
       void useHarvestDueStore().load();
       void useNotificationsStore().fetch();
     } catch (err: unknown) {
-      const axiosMsg = (err as any)?.response?.data?.message;
+      const axiosMsg = isAxiosError(err) ? (err.response?.data?.message as string | undefined) : undefined;
       error.value = axiosMsg
         ? String(axiosMsg)
         : err instanceof Error

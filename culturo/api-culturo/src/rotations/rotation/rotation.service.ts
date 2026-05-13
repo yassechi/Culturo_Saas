@@ -36,6 +36,29 @@ interface PlanResult {
 
 type PlantingResult = PlantingSuccess | PlantingWarning;
 
+export interface PlantableSectionResult {
+  sectionPlanId: number;
+  boardId: number;
+  boardName: string;
+  sectionNumber: number;
+  totalSections: number;
+  lastPlantedVegetable: string | null;
+  neverPlanted: boolean;
+}
+
+export interface HarvestDueResult {
+  id_section: number;
+  section_number: number;
+  end_date: Date;
+  days_left: number;
+  overdue: boolean;
+  vegetable_name: string | null;
+  variety_name: string | null;
+  board_name: string | null;
+  sole_name: string | null;
+  exploitation_name: string | null;
+}
+
 interface RawCulturePlanResult {
   board_id_board: number;
   board_board_name: string;
@@ -503,7 +526,7 @@ export class RotationService {
     vegetableId: number,
     startDate: Date,
     endDate: Date,
-  ): Promise<any[]> {
+  ): Promise<PlantableSectionResult[]> {
     try {
       const targetVegetable = await this.vegetableRepository.findOne({
         where: { id_vegetable: vegetableId },
@@ -568,7 +591,7 @@ export class RotationService {
         agg.allSections.push(...sectionPlan.sections);
       }
 
-      const plantableLocations: any[] = [];
+      const plantableLocations: PlantableSectionResult[] = [];
 
       for (const agg of boardMap.values()) {
         // ── RÈGLE 1 (niveau planche) : pas deux familles primaires différentes
@@ -1117,7 +1140,7 @@ export class RotationService {
     }
   }
 
-  async getHarvestDue(daysAhead = 7): Promise<any[]> {
+  async getHarvestDue(daysAhead = 7): Promise<HarvestDueResult[]> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const limit = new Date(today);

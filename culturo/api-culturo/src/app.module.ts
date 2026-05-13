@@ -15,6 +15,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 const envFilePath =
   process.env.NODE_ENV === 'production'
@@ -26,6 +28,14 @@ const envFilePath =
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath,
+    }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ([{
+        ttl: config.get<number>('THROTTLE_TTL', 60000),
+        limit: config.get<number>('THROTTLE_LIMIT', 100),
+      }]),
     }),
     TypeOrmModule.forRoot(AppDataSourceOptions),
 
@@ -50,6 +60,9 @@ const envFilePath =
     WateringModule,
     StatisticsModule,
     NotificationsModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { observationsApi, type ObservationQuery } from '@/api/observations';
+import { apiMessage } from '@/utils/apiError';
 import type {
   CreateObservationPayload,
   ObservationContributor,
@@ -159,10 +160,8 @@ export const useObservationsStore = defineStore('observations', () => {
       myObservations.value = [response.data, ...myObservations.value];
       feedback.value = 'Observation enregistrée et envoyée au formateur.';
       return response.data;
-    } catch (apiError: any) {
-      error.value =
-        apiError?.response?.data?.message ??
-        'Impossible d’enregistrer cette observation.';
+    } catch (apiError: unknown) {
+      error.value = apiMessage(apiError, "Impossible d’enregistrer cette observation.");
       throw apiError;
     } finally {
       submitting.value = false;
@@ -188,10 +187,8 @@ export const useObservationsStore = defineStore('observations', () => {
       if (pendingCount.value > 0) pendingCount.value--;
       feedback.value = 'Observation relue avec succès.';
       return response.data;
-    } catch (apiError: any) {
-      error.value =
-        apiError?.response?.data?.message ??
-        'Impossible de relire cette observation.';
+    } catch (apiError: unknown) {
+      error.value = apiMessage(apiError, 'Impossible de relire cette observation.');
       throw apiError;
     } finally {
       reviewingIds.value = reviewingIds.value.filter((value) => value !== id);

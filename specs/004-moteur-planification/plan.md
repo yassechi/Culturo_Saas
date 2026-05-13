@@ -811,6 +811,69 @@ Ces fonctionnalités sont présentes dans le dépôt mais n'étaient pas couvert
 
 ---
 
+## 10. Badges, récoltes imminentes et alertes rotation (2026-05-14)
+
+### 10.1 Gestion utilisateurs étendue aux formateurs
+
+- Route `/admin/utilisateurs` ouverte aux formateurs (`roles: ['admin', 'formateur']`)
+- Lien "Utilisateurs" ajouté dans la sidebar formateur
+- Table : colonne "Formateur" avec `<select>` pour affecter un formateur à chaque stagiaire
+- Modal création : sélection du rôle (admin / formateur / stagiaire) + sélecteur de formateur si stagiaire
+- **Backend** : `User_` entity — colonne `id_formateur` (int nullable) + relation `@ManyToOne` auto-référentielle
+- **DTO** : `UpdateUserDTO.id_formateur` décoré `@ValidateIf / @IsNumber / @Transform` pour passer le `ValidationPipe whitelist`
+- **`UsersService.updateUser()`** : affecte `id_formateur` si présent dans le payload
+- **Observations filtrées par formateur assigné** : `findAll()` → `author.id_formateur = :formateurId` pour le rôle formateur (admin voit tout)
+- **Email notification** : envoyé uniquement au formateur assigné (`author.id_formateur`) et non à tous les formateurs
+
+### 10.2 Badges sidebar
+
+**Formateur — badge "Validation"** :
+- `useObservationsStore.loadPendingCount()` → `GET /observations?reviewStatus=pending` compté séparément dans `pendingCount ref`
+- `MainLayout` appelle `loadPendingCount()` au mount pour formateur/admin
+- `{ to: '/validation', label: 'Validation', badge: pendingValidationCount }` avec `.nav-badge` rouge
+
+**Stagiaire — badge "Mes observations"** :
+- `seen_by_author` boolean ajouté sur `Observation` entity (`default: true`)
+- `review()` dans `observations.service.ts` passe `seen_by_author = false` lors de la validation
+- `PATCH /observations/mark-seen` → `markAllSeenForAuthor(authorId)` marque toutes les observations relues
+- `ObservationsView` appelle `store.markAllSeen()` au mount → badge disparaît automatiquement
+- `myStats.unseen` = observations `review_status !== 'pending' && !seen_by_author`
+
+### 10.3 Récoltes imminentes dans tous les dashboards
+
+- `GET /rotations/harvest-due?days=7` — retourne les sections `section_active = true` dont `end_date <= today+7` (sans borne inférieure → inclut les retards)
+- **Store partagé `harvestDue.ts`** (`useHarvestDueStore`) : `items ref`, `loading ref`, `load(days)` action
+- `DashboardView` et `TrainerDashboardView` utilisent `storeToRefs(harvestDueStore)` pour la réactivité
+- `useHarvestStore.createHarvest()` et `deleteHarvest()` appellent `harvestDueStore.load()` + `notificationsStore.fetch()` après chaque opération → mise à jour automatique sans rechargement
+- **Codes couleur** : retard → rouge (`badge-overdue`), aujourd'hui → orange (`badge-today`), bientôt → vert (`badge-soon`)
+
+### 10.4 Cloche notifications — récoltes urgentes
+
+- Fenêtre réduite à 7 jours (cohérence avec dashboard)
+- Trois niveaux distincts générés par `addUpcomingHarvestNotifications()` :
+  - `end_date < today` → notification `critical` "X récolte(s) en retard"
+  - `end_date = today` → notification `warning` "X récolte(s) à faire aujourd'hui"
+  - `end_date <= today+7` → notification `info` "X récoltes dans les 7 prochains jours"
+- Compteur observations formateur filtré par `author.id_formateur` dans `notifications.service.ts`
+
+### 10.5 Alertes rotation — cohabitation de familles primaires
+
+- `computeRotationAlerts()` remplacé par deux méthodes parallèles :
+  - `computeRotation5yAlerts()` — inchangé, `ruleType: 'rotation_5y'`
+  - `computeCohabitationAlerts()` — détecte les planches avec 2+ familles primaires actives simultanément (`section_active = true`), `ruleType: 'cohabitation'`
+- `DashboardRotationAlert` : ajout de `ruleType: 'rotation_5y' | 'cohabitation'` et `description?: string`
+- Template : badge coloré par type (orange 5 ans, violet cohabitation) + description adaptée
+- Règle jachère (3 ans consécutifs) conservée dans le flux de plantation uniquement, retirée du dashboard
+
+### 10.6 Seed SQL — scénarios de violation contrôlés
+
+- DO block principal : `vegetable_id` limité aux légumes non-primaires (`ARRAY[1,3,9,10,11,12,13,14,15,16,17,18,19,20]`) → aucune violation accidentelle
+- Bloc `13b` ajouté avec violations explicites :
+  - **5 ans (1 seule)** : Tomate (Solanacées) sur N1 en mars 2022 puis mars 2025 (écart 3 ans)
+  - **Cohabitation** : N2 avec Tomate (Solanacées) + Brocoli (Crucifères) actives simultanément
+
+---
+
 ## Statut global
 
 | Fonctionnalité            | Backend | Frontend | Route       | Rôles |
@@ -839,3 +902,11 @@ Ces fonctionnalités sont présentes dans le dépôt mais n'étaient pas couvert
 | Sélecteur unité quantité  | —       | ✅       | —           | — |
 | Expand planche + suppr. section | ✅ | ✅     | —           | — |
 | Fix réduction sections    | ✅      | —        | —           | — |
+| Affectation formateur→stagiaire | ✅ | ✅   | —           | admin, formateur |
+| Badge validation (formateur)    | ✅ | ✅   | —           | formateur |
+| Badge observations non lues (stagiaire) | ✅ | ✅ | —      | stagiaire |
+| Récoltes imminentes dashboard   | ✅ | ✅   | —           | tous |
+| Store partagé harvestDue        | —  | ✅   | —           | — |
+| Cloche — récoltes critical/warning | ✅ | ✅ | —          | tous |
+| Alertes rotation cohabitation   | ✅ | ✅   | —           | tous |
+| Seed SQL violations contrôlées  | ✅ | —    | —           | — |

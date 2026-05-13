@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import { adminApi, type ApiUser, type ApiGroup, type CreateUserPayload } from '@/api/admin';
+import { apiMessage } from '@/utils/apiError';
 
 export type RoleName = 'admin' | 'formateur' | 'stagiaire';
 
@@ -213,9 +214,8 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
         }
       }
       closeModal();
-    } catch (e: any) {
-      modalError.value =
-        e?.response?.data?.message ?? 'Une erreur est survenue. Vérifiez les champs.';
+    } catch (e: unknown) {
+      modalError.value = apiMessage(e, 'Une erreur est survenue. Vérifiez les champs.');
     } finally {
       modalLoading.value = false;
     }
@@ -255,8 +255,8 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
       }
       groupForm.value = { name: '', description: '' };
       groupEditId.value = null;
-    } catch (e: any) {
-      groupError.value = e?.response?.data?.message ?? 'Erreur lors de la sauvegarde.';
+    } catch (e: unknown) {
+      groupError.value = apiMessage(e, 'Erreur lors de la sauvegarde.');
     }
   }
 
@@ -276,8 +276,8 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
       await adminApi.deleteGroup(id);
       groups.value = groups.value.filter((g) => g.id !== id);
       users.value.forEach((u) => { if (u.id_group === id) u.id_group = null; });
-    } catch (e: any) {
-      groupError.value = e?.response?.data?.message ?? 'Erreur lors de la suppression.';
+    } catch (e: unknown) {
+      groupError.value = apiMessage(e, 'Erreur lors de la suppression.');
     }
   }
 
@@ -286,8 +286,8 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
       await adminApi.updateUser({ id_user: userId, id_formateur: formateurId });
       const u = users.value.find((u) => u.id_user === userId);
       if (u) u.id_formateur = formateurId;
-    } catch (e: any) {
-      error.value = e?.response?.data?.message ?? 'Erreur lors de l\'affectation du formateur.';
+    } catch (e: unknown) {
+      error.value = apiMessage(e, "Erreur lors de l'affectation du formateur.");
     }
   }
 
@@ -299,8 +299,8 @@ export const useAdminUsersStore = defineStore('adminUsers', () => {
         u.id_group = groupId;
         u.group = groupId !== null ? (groups.value.find((g) => g.id === groupId) ?? null) : null;
       }
-    } catch (e: any) {
-      error.value = e?.response?.data?.message ?? 'Erreur lors de l\'affectation.';
+    } catch (e: unknown) {
+      error.value = apiMessage(e, "Erreur lors de l'affectation.");
     }
   }
 

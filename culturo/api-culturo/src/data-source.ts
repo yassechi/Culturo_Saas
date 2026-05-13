@@ -56,7 +56,7 @@ export const AppDataSourceOptions: DataSourceOptions = {
     FamilyIncompatibility,
     UserGroup,
   ],
-  synchronize: true, // dev uniquement
+  synchronize: process.env.NODE_ENV !== 'production',
 };
 
 export const AppDataSource = new DataSource(AppDataSourceOptions);

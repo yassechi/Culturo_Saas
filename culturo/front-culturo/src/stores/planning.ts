@@ -1,6 +1,7 @@
 // culturo/front-culturo/src/stores/planning.ts
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { isAxiosError } from 'axios';
 import { exploitationsApi } from '@/api/exploitations';
 import { rotationsApi } from '@/api/rotations';
 import { getConfig } from '@/stores/config';
@@ -390,8 +391,8 @@ export const usePlanningStore = defineStore('planning', () => {
       await loadCulturePlan();
       useHistoryStore().invalidateSoles();
       return true;
-    } catch (error: any) {
-      const data = error?.response?.data;
+    } catch (error: unknown) {
+      const data = isAxiosError(error) ? (error.response?.data as { message?: string; warningDetails?: unknown } | undefined) : undefined;
       if (data?.warningDetails) {
         const msg =
           typeof data.message === 'string' && data.message.length > 0

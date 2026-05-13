@@ -1,6 +1,7 @@
 // culturo/front-culturo/src/stores/botanical.ts
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { apiMessage } from '@/utils/apiError';
 import {
   botanicalApi,
   type ApiFamily,
@@ -195,8 +196,8 @@ export const useBotanicalStore = defineStore('botanical', () => {
         }
       }
       closeFamilyModal();
-    } catch (e: any) {
-      familyModalError.value = e?.response?.data?.message ?? 'Une erreur est survenue.';
+    } catch (e: unknown) {
+      familyModalError.value = apiMessage(e, 'Une erreur est survenue.');
     } finally {
       familyModalLoading.value = false;
     }
@@ -278,8 +279,8 @@ export const useBotanicalStore = defineStore('botanical', () => {
         }
       }
       closeVegModal();
-    } catch (e: any) {
-      vegModalError.value = e?.response?.data?.message ?? 'Une erreur est survenue.';
+    } catch (e: unknown) {
+      vegModalError.value = apiMessage(e, 'Une erreur est survenue.');
     } finally {
       vegModalLoading.value = false;
     }

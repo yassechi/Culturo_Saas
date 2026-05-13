@@ -1,6 +1,7 @@
 // culturo/front-culturo/src/stores/soilBoards.ts
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { apiMessage } from '@/utils/apiError';
 import {
   soilBoardsApi,
   type ApiExploitation,
@@ -224,8 +225,8 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
         }
       }
       closeExpModal();
-    } catch (e: any) {
-      expModalError.value = e?.response?.data?.message ?? 'Une erreur est survenue.';
+    } catch (e: unknown) {
+      expModalError.value = apiMessage(e, 'Une erreur est survenue.');
     } finally {
       expModalLoading.value = false;
     }
@@ -293,8 +294,8 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
       }
       syncPlanningStore();
       closeSoleModal();
-    } catch (e: any) {
-      soleModalError.value = e?.response?.data?.message ?? 'Une erreur est survenue.';
+    } catch (e: unknown) {
+      soleModalError.value = apiMessage(e, 'Une erreur est survenue.');
     } finally {
       soleModalLoading.value = false;
     }
@@ -373,8 +374,8 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
       }
       syncPlanningStore();
       closeBoardModal();
-    } catch (e: any) {
-      boardModalError.value = e?.response?.data?.message ?? 'Une erreur est survenue.';
+    } catch (e: unknown) {
+      boardModalError.value = apiMessage(e, 'Une erreur est survenue.');
     } finally {
       boardModalLoading.value = false;
     }
@@ -432,9 +433,8 @@ export const useSoilBoardsStore = defineStore('soilBoards', () => {
       const actualCount = res.data.sectionPlan.number_of_section;
       const planningStore = usePlanningStore();
       planningStore.sectionPlanCache = new Map(planningStore.sectionPlanCache).set(boardId, actualCount);
-    } catch (e: any) {
-      const msg = e?.response?.data?.message ?? 'Impossible de modifier les sections.';
-      sectionsError.value = { ...sectionsError.value, [boardId]: String(msg) };
+    } catch (e: unknown) {
+      sectionsError.value = { ...sectionsError.value, [boardId]: apiMessage(e, 'Impossible de modifier les sections.') };
       throw e;
     } finally {
       sectionsLoading.value = { ...sectionsLoading.value, [boardId]: false };
