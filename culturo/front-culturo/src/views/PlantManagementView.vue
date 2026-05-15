@@ -221,41 +221,33 @@
           <div v-if="order.notes" class="order-notes">📝 {{ order.notes }}</div>
 
           <div class="order-card-actions">
-            <button
-              v-if="order.status === 'draft'"
-              class="btn-sm"
-              @click="store.openAddItem(order.id_supplier_order)"
-            >+ Ajouter une ligne</button>
+            <!-- Actions brouillon -->
+            <template v-if="order.status === 'draft'">
+              <button class="btn-sm" @click="store.openAddItem(order.id_supplier_order)">+ Ligne</button>
+              <button class="btn-sm" @click="store.openEditOrder(order)">✏️ Modifier</button>
+              <button class="btn-sm btn-sm-action" @click="store.updateOrderStatus(order.id_supplier_order, 'sent')">📤 Envoyer</button>
+              <button class="btn-sm btn-sm-danger" @click="store.updateOrderStatus(order.id_supplier_order, 'cancelled')">Annuler</button>
+            </template>
 
-            <button
-              v-if="order.status === 'draft'"
-              class="btn-sm btn-sm-action"
-              @click="store.updateOrderStatus(order.id_supplier_order, 'sent')"
-            >📤 Marquer envoyée</button>
-
+            <!-- Bouton de confirmation de réception (prominant) -->
             <button
               v-if="order.status === 'sent'"
-              class="btn-sm btn-sm-success"
-              @click="store.updateOrderStatus(order.id_supplier_order, 'received')"
-            >✅ Marquer reçue → stock</button>
+              class="btn-receive"
+              @click="confirmReceiveOrder(order.id_supplier_order)"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Confirmer la réception → stock mis à jour
+            </button>
+
+            <template v-if="order.status === 'sent'">
+              <button class="btn-sm btn-sm-danger" @click="store.updateOrderStatus(order.id_supplier_order, 'cancelled')">Annuler</button>
+            </template>
 
             <button
-              v-if="order.status === 'draft' || order.status === 'sent'"
-              class="btn-sm btn-sm-danger"
-              @click="store.updateOrderStatus(order.id_supplier_order, 'cancelled')"
-            >Annuler</button>
-
-            <button
-              v-if="order.status === 'draft'"
-              class="btn-sm"
-              @click="store.openEditOrder(order)"
-            >✏️ Modifier</button>
-
-            <button
-              v-if="order.status !== 'received'"
+              v-if="order.status !== 'received' && order.status !== 'cancelled'"
               class="btn-sm btn-sm-danger"
               @click="confirmDeleteOrder(order.id_supplier_order)"
-            >🗑 Supprimer</button>
+            >🗑</button>
           </div>
         </div>
       </div>
@@ -381,15 +373,17 @@
     <!-- Order modal -->
     <Teleport to="body">
       <div v-if="store.orderModalOpen" class="modal-backdrop" @click.self="store.closeOrderModal()">
-        <div class="modal-box">
+        <div class="modal-box modal-box-wide">
           <div class="modal-header">
             <h3>{{ store.orderModalMode === 'create' ? 'Nouvelle commande' : 'Modifier la commande' }}</h3>
             <button class="modal-close" @click="store.closeOrderModal()">×</button>
           </div>
           <div class="modal-body">
+
+            <!-- Infos commande -->
             <div class="form-group">
               <label>Fournisseur *</label>
-              <select v-model="store.orderForm.id_supplier" class="form-select">
+              <select v-model="store.orderForm.id_supplier" class="form-select" :disabled="store.orderModalMode === 'edit'">
                 <option :value="null" disabled>Choisir…</option>
                 <option v-for="s in store.activeSuppliers" :key="s.id_supplier" :value="s.id_supplier">
                   {{ s.supplier_name }}
@@ -410,12 +404,78 @@
               <label>Notes</label>
               <textarea v-model="store.orderForm.notes" class="form-input form-textarea" rows="2" placeholder="Informations complémentaires…" />
             </div>
+
+            <!-- Articles commandés -->
+            <div class="draft-items-section">
+              <div class="draft-items-header">
+                <span class="draft-items-title">Articles commandés</span>
+                <button type="button" class="btn-add-row" @click="store.addDraftRow()">+ Ajouter une ligne</button>
+              </div>
+
+              <div class="draft-items-table-wrap">
+                <table class="draft-items-table">
+                  <thead>
+                    <tr>
+                      <th>Légume</th>
+                      <th>Variété</th>
+                      <th>Quantité</th>
+                      <th>Unité</th>
+                      <th>Prix unit.</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, i) in store.orderDraftItems" :key="i">
+                      <td>
+                        <select
+                          v-model="item.id_vegetable"
+                          class="cell-select"
+                          @change="onDraftVegetableChange(item)"
+                        >
+                          <option :value="null" disabled>Légume…</option>
+                          <option v-for="v in botanicalStore.vegetables" :key="v.id_vegetable" :value="v.id_vegetable">
+                            {{ v.vegetable_name }}
+                          </option>
+                        </select>
+                      </td>
+                      <td>
+                        <select v-model="item.id_variety" class="cell-select">
+                          <option :value="null">—</option>
+                          <option
+                            v-for="vr in varietiesForDraftItem(item.id_vegetable)"
+                            :key="vr.id_variety"
+                            :value="vr.id_variety"
+                          >{{ vr.variety_name }}</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input v-model.number="item.quantity_ordered" type="number" min="1" class="cell-input cell-qty" />
+                      </td>
+                      <td>
+                        <select v-model="item.unit" class="cell-select cell-unit">
+                          <option value="plants">plants</option>
+                          <option value="graines">graines</option>
+                          <option value="kg">kg</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input v-model="item.unit_price" type="text" class="cell-input cell-price" placeholder="0.35 €" />
+                      </td>
+                      <td>
+                        <button type="button" class="btn-remove-row" @click="store.removeDraftRow(i)">×</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <p v-if="store.orderModalError" class="form-error">{{ store.orderModalError }}</p>
           </div>
           <div class="modal-footer">
             <button class="secondary-button" @click="store.closeOrderModal()">Annuler</button>
             <button class="primary-button" :disabled="store.orderModalLoading" @click="store.submitOrderModal(authStore.user?.id ?? 0)">
-              {{ store.orderModalLoading ? 'Enregistrement…' : 'Créer la commande' }}
+              {{ store.orderModalLoading ? 'Enregistrement…' : (store.orderModalMode === 'create' ? 'Créer la commande' : 'Enregistrer') }}
             </button>
           </div>
         </div>
@@ -577,6 +637,25 @@ function statusLabel(status: string) {
     cancelled: 'Annulée',
   };
   return map[status] ?? status;
+}
+
+// ── Variétés pour les articles du modal commande ──────────────────────────────
+function varietiesForDraftItem(vegetableId: number | null) {
+  if (!vegetableId) return [];
+  const veg = botanicalStore.vegetables.find((v) => v.id_vegetable === vegetableId);
+  return veg?.varieties ?? botanicalStore.varietiesMap[vegetableId] ?? [];
+}
+
+function onDraftVegetableChange(item: { id_vegetable: number | null; id_variety: number | null }) {
+  item.id_variety = null;
+  if (item.id_vegetable) botanicalStore.loadVarieties(item.id_vegetable);
+}
+
+// ── Confirmation de réception ─────────────────────────────────────────────────
+function confirmReceiveOrder(id: number) {
+  if (confirm('Confirmer la réception de cette commande ? Le stock sera mis à jour automatiquement.')) {
+    store.updateOrderStatus(id, 'received');
+  }
 }
 
 function confirmDeleteStock(id: number) {
@@ -1124,6 +1203,113 @@ onMounted(async () => {
 .btn-sm-action:hover { background: rgba(180, 120, 0, 0.05); }
 .btn-sm-success { border-color: rgba(22, 163, 74, 0.3); color: #166534; }
 .btn-sm-success:hover { background: rgba(22, 163, 74, 0.05); }
+
+/* Bouton réception prominent */
+.btn-receive {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1.1rem;
+  background: linear-gradient(135deg, #166534, #14532d);
+  color: #f0fdf4;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.3);
+  transition: opacity 140ms, transform 140ms;
+}
+.btn-receive:hover { opacity: 0.88; transform: translateY(-1px); }
+
+/* Modal wide */
+.modal-box-wide { max-width: 800px !important; }
+
+/* Draft items table in order modal */
+.draft-items-section {
+  margin-top: 1rem;
+  border-top: 1px solid rgba(39, 65, 53, 0.1);
+  padding-top: 1rem;
+}
+.draft-items-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.draft-items-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(39, 65, 53, 0.65);
+}
+.btn-add-row {
+  padding: 0.3rem 0.75rem;
+  border: 1.5px dashed rgba(39, 65, 53, 0.3);
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: rgba(39, 65, 53, 0.7);
+  cursor: pointer;
+  transition: background 140ms, border-color 140ms;
+}
+.btn-add-row:hover { background: rgba(39, 65, 53, 0.05); border-color: rgba(39, 65, 53, 0.5); }
+.draft-items-table-wrap { overflow-x: auto; }
+.draft-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.draft-items-table th {
+  padding: 5px 8px;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(39, 65, 53, 0.55);
+  border-bottom: 1px solid rgba(39, 65, 53, 0.1);
+}
+.draft-items-table td {
+  padding: 4px 4px;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(39, 65, 53, 0.06);
+}
+.cell-select {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgba(39, 65, 53, 0.18);
+  border-radius: 7px;
+  font-size: 0.84rem;
+  background: #fff;
+  outline: none;
+  min-width: 110px;
+}
+.cell-input {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgba(39, 65, 53, 0.18);
+  border-radius: 7px;
+  font-size: 0.84rem;
+  background: #fff;
+  outline: none;
+}
+.cell-qty { max-width: 70px; text-align: right; }
+.cell-unit { max-width: 90px; }
+.cell-price { max-width: 80px; }
+.btn-remove-row {
+  padding: 0.2rem 0.5rem;
+  border: none;
+  background: none;
+  color: rgba(220, 38, 38, 0.7);
+  font-size: 1rem;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background 120ms;
+}
+.btn-remove-row:hover { background: rgba(220, 38, 38, 0.08); }
 
 /* Orders */
 .status-filters { display: flex; gap: 0.35rem; flex-wrap: wrap; }

@@ -113,8 +113,10 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
   const orderForm = ref<OrderForm>(emptyOrderForm());
   const orderModalError = ref<string | null>(null);
   const orderModalLoading = ref(false);
+  // Lignes d'articles gérées directement dans le modal
+  const orderDraftItems = ref<OrderItemForm[]>([emptyItemForm()]);
 
-  // Add item panel
+  // Add item panel (toujours utilisé pour ajouter des lignes à une commande existante)
   const addItemOpen = ref(false);
   const addItemOrderId = ref<number | null>(null);
   const itemForm = ref<OrderItemForm>(emptyItemForm());
@@ -331,6 +333,7 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
     orderModalMode.value = 'create';
     orderModalId.value = null;
     orderForm.value = emptyOrderForm();
+    orderDraftItems.value = [emptyItemForm()];
     orderModalError.value = null;
     orderModalOpen.value = true;
   }
@@ -344,6 +347,16 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
       expected_date: o.expected_date ?? '',
       notes: o.notes ?? '',
     };
+    // Pré-remplir les articles existants
+    orderDraftItems.value = o.items.length > 0
+      ? o.items.map(item => ({
+          id_vegetable: item.vegetable.id_vegetable,
+          id_variety: item.variety?.id_variety ?? null,
+          quantity_ordered: item.quantity_ordered,
+          unit: item.unit,
+          unit_price: item.unit_price ?? '',
+        }))
+      : [emptyItemForm()];
     orderModalError.value = null;
     orderModalOpen.value = true;
   }
@@ -351,6 +364,15 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
   function closeOrderModal() {
     orderModalOpen.value = false;
     orderModalError.value = null;
+  }
+
+  function addDraftRow() {
+    orderDraftItems.value.push(emptyItemForm());
+  }
+
+  function removeDraftRow(i: number) {
+    orderDraftItems.value.splice(i, 1);
+    if (orderDraftItems.value.length === 0) orderDraftItems.value.push(emptyItemForm());
   }
 
   async function submitOrderModal(userId: number) {
@@ -361,6 +383,10 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
     orderModalLoading.value = true;
     orderModalError.value = null;
     try {
+      const validItems = orderDraftItems.value.filter(
+        item => item.id_vegetable !== null && item.quantity_ordered > 0,
+      );
+
       if (orderModalMode.value === 'create') {
         const payload: CreateOrderPayload = {
           id_supplier: orderForm.value.id_supplier,
@@ -370,15 +396,33 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
           notes: orderForm.value.notes.trim() || undefined,
         };
         const res = await supplierOrdersApi.create(payload);
-        orders.value.unshift(res.data);
+        const newOrderId = res.data.id_supplier_order;
+
+        // Ajouter chaque article valide
+        for (const item of validItems) {
+          await supplierOrdersApi.addItem(newOrderId, {
+            id_vegetable: item.id_vegetable!,
+            id_variety: item.id_variety ?? undefined,
+            quantity_ordered: item.quantity_ordered,
+            unit: item.unit,
+            unit_price: item.unit_price.trim() || undefined,
+          });
+        }
+
+        // Recharger la commande complète avec ses articles
+        const fullRes = await supplierOrdersApi.getOne(newOrderId);
+        orders.value.unshift(fullRes.data);
       } else if (orderModalId.value !== null) {
-        const res = await supplierOrdersApi.update(orderModalId.value, {
+        // Édition : mettre à jour les infos
+        await supplierOrdersApi.update(orderModalId.value, {
           order_date: orderForm.value.order_date,
           expected_date: orderForm.value.expected_date || undefined,
           notes: orderForm.value.notes.trim() || undefined,
         });
+        // Recharger la commande complète
+        const fullRes = await supplierOrdersApi.getOne(orderModalId.value);
         const idx = orders.value.findIndex((o) => o.id_supplier_order === orderModalId.value);
-        if (idx !== -1) orders.value[idx] = res.data;
+        if (idx !== -1) orders.value[idx] = fullRes.data;
       }
       closeOrderModal();
     } catch (e: unknown) {
@@ -471,6 +515,7 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
     stockModalOpen, stockModalMode, stockForm, stockModalError, stockModalLoading,
     // Order modal
     orderModalOpen, orderModalMode, orderForm, orderModalError, orderModalLoading,
+    orderDraftItems, addDraftRow, removeDraftRow,
     // Add item
     addItemOpen, addItemOrderId, itemForm, itemFormError, itemFormLoading,
     // Actions
