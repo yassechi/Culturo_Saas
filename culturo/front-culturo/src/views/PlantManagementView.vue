@@ -91,7 +91,17 @@
     <section v-else-if="activeTab === 'suppliers'" class="tab-content">
       <div class="section-toolbar">
         <span class="toolbar-info">{{ store.suppliers.length }} fournisseur(s)</span>
-        <button class="primary-button" @click="store.openCreateSupplier()">+ Nouveau fournisseur</button>
+        <div class="toolbar-actions">
+          <button class="export-btn" title="Exporter en CSV" @click="exportSuppliersCSV">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV
+          </button>
+          <button class="export-btn" title="Exporter en PDF" @click="exportSuppliersPDF">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            PDF
+          </button>
+          <button class="primary-button" @click="store.openCreateSupplier()">+ Nouveau fournisseur</button>
+        </div>
       </div>
 
       <div v-if="store.loadingSuppliers" class="loading-state">Chargement…</div>
@@ -141,7 +151,17 @@
             @click="orderStatusFilter = f.value"
           >{{ f.label }}</button>
         </div>
-        <button class="primary-button" @click="store.openCreateOrder()">+ Nouvelle commande</button>
+        <div class="toolbar-actions">
+          <button class="export-btn" title="Exporter en CSV" @click="exportOrdersCSV">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV
+          </button>
+          <button class="export-btn" title="Exporter en PDF" @click="exportOrdersPDF">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            PDF
+          </button>
+          <button class="primary-button" @click="store.openCreateOrder()">+ Nouvelle commande</button>
+        </div>
       </div>
 
       <div v-if="store.loadingOrders" class="loading-state">Chargement…</div>
@@ -645,6 +665,190 @@ function exportStockPDF() {
   </div>
 </body>
 </html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 400);
+}
+
+// ── Exports Fournisseurs ───────────────────────────────────────────────────────
+function exportSuppliersCSV() {
+  const headers = ['Nom', 'Email', 'Téléphone', 'Site web', 'Statut'];
+  const rows = store.suppliers.map(s => [
+    s.supplier_name,
+    s.contact_email ?? '',
+    s.contact_phone ?? '',
+    s.website ?? '',
+    s.supplier_active ? 'Actif' : 'Inactif',
+  ]);
+  const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = [headers, ...rows].map(row => row.map(escape).join(';')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fournisseurs-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportSuppliersPDF() {
+  const date = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const rows = store.suppliers.map(s => `
+    <tr>
+      <td>${s.supplier_name}</td>
+      <td>${s.contact_email ?? '—'}</td>
+      <td>${s.contact_phone ?? '—'}</td>
+      <td>${s.website ? `<a href="${s.website}">${s.website}</a>` : '—'}</td>
+      <td class="${s.supplier_active ? 'active' : 'inactive'}">${s.supplier_active ? 'Actif' : 'Inactif'}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<title>Fournisseurs — ${date}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; font-size:12px; color:#1a2a1a; padding:2cm; }
+  .header { margin-bottom:1.5rem; border-bottom:2px solid #274135; padding-bottom:.75rem; }
+  .header h1 { font-size:20px; color:#274135; margin-bottom:4px; }
+  .header p { color:#666; font-size:11px; }
+  table { width:100%; border-collapse:collapse; margin-top:1rem; }
+  th { background:#274135; color:#fffdf8; text-align:left; padding:8px 10px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
+  td { padding:7px 10px; border-bottom:1px solid #e8e0d0; }
+  tr:nth-child(even) td { background:#f9f5ed; }
+  td.active { color:#2d6e22; font-weight:700; }
+  td.inactive { color:#888; }
+  .footer { margin-top:1.5rem; padding-top:.75rem; border-top:1px solid #ccc; display:flex; justify-content:space-between; font-size:10px; color:#888; }
+  @media print { body { padding:1cm; } }
+</style></head><body>
+  <div class="header"><h1>Fournisseurs</h1><p>Culturo SaaS — Exporté le ${date}</p></div>
+  <table>
+    <thead><tr><th>Nom</th><th>Email</th><th>Téléphone</th><th>Site web</th><th>Statut</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="footer"><span>Culturo SaaS</span><span>${date}</span></div>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 400);
+}
+
+// ── Exports Commandes ──────────────────────────────────────────────────────────
+function exportOrdersCSV() {
+  const headers = ['Fournisseur', 'Date commande', 'Livraison prévue', 'Statut', 'Légume', 'Variété', 'Commandé', 'Reçu', 'Unité', 'Prix unit.', 'Notes commande'];
+  const rows: (string | number)[][] = [];
+
+  for (const order of filteredOrders.value) {
+    if (order.items.length === 0) {
+      rows.push([
+        order.supplier.supplier_name,
+        formatDate(order.order_date),
+        order.expected_date ? formatDate(order.expected_date) : '',
+        statusLabel(order.status),
+        '', '', '', '', '', '',
+        order.notes ?? '',
+      ]);
+    } else {
+      for (const item of order.items) {
+        rows.push([
+          order.supplier.supplier_name,
+          formatDate(order.order_date),
+          order.expected_date ? formatDate(order.expected_date) : '',
+          statusLabel(order.status),
+          item.vegetable.vegetable_name,
+          item.variety?.variety_name ?? '',
+          item.quantity_ordered,
+          item.quantity_received,
+          item.unit,
+          item.unit_price ?? '',
+          order.notes ?? '',
+        ]);
+      }
+    }
+  }
+
+  const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = [headers, ...rows].map(row => row.map(escape).join(';')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `commandes-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportOrdersPDF() {
+  const date = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const orderBlocks = filteredOrders.value.map(order => {
+    const itemRows = order.items.map(item => `
+      <tr>
+        <td>${item.vegetable.vegetable_name}</td>
+        <td>${item.variety?.variety_name ?? '—'}</td>
+        <td class="num">${item.quantity_ordered}</td>
+        <td class="num">${item.quantity_received}</td>
+        <td>${item.unit}</td>
+        <td>${item.unit_price ?? '—'}</td>
+      </tr>`).join('');
+
+    const itemsTable = order.items.length
+      ? `<table class="items-table">
+          <thead><tr><th>Légume</th><th>Variété</th><th>Commandé</th><th>Reçu</th><th>Unité</th><th>Prix unit.</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+         </table>`
+      : `<p class="no-items">Aucune ligne</p>`;
+
+    return `<div class="order-block">
+      <div class="order-head">
+        <div>
+          <span class="order-supplier">${order.supplier.supplier_name}</span>
+          <span class="order-dates">Commandé le ${formatDate(order.order_date)}${order.expected_date ? ' · Livraison prévue ' + formatDate(order.expected_date) : ''}</span>
+        </div>
+        <span class="status-badge status-${order.status}">${statusLabel(order.status)}</span>
+      </div>
+      ${order.notes ? `<p class="order-notes">📝 ${order.notes}</p>` : ''}
+      ${itemsTable}
+    </div>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<title>Commandes fournisseurs — ${date}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; font-size:12px; color:#1a2a1a; padding:2cm; }
+  .header { margin-bottom:1.5rem; border-bottom:2px solid #274135; padding-bottom:.75rem; }
+  .header h1 { font-size:20px; color:#274135; margin-bottom:4px; }
+  .header p { color:#666; font-size:11px; }
+  .order-block { margin-bottom:1.5rem; padding:1rem; border:1px solid #d8d0c0; border-radius:8px; break-inside:avoid; }
+  .order-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:.75rem; }
+  .order-supplier { font-weight:700; font-size:13px; display:block; color:#274135; }
+  .order-dates { font-size:10px; color:#888; margin-top:2px; display:block; }
+  .order-notes { font-size:11px; color:#555; margin-bottom:.6rem; }
+  .status-badge { font-size:9px; font-weight:700; padding:3px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:.06em; flex-shrink:0; }
+  .status-draft { background:#f0e8d0; color:#7a5a10; border:1px solid #d4b86a; }
+  .status-sent { background:#d8eaf8; color:#1a5a9a; border:1px solid #7ab0d8; }
+  .status-received { background:#d8f0d8; color:#1a6a1a; border:1px solid #6ab86a; }
+  .status-cancelled { background:#f0d8d8; color:#8a1a1a; border:1px solid #c88080; }
+  table.items-table { width:100%; border-collapse:collapse; }
+  .items-table th { background:#274135; color:#fffdf8; text-align:left; padding:6px 8px; font-size:10px; text-transform:uppercase; }
+  .items-table td { padding:5px 8px; border-bottom:1px solid #e8e0d0; }
+  .items-table tr:nth-child(even) td { background:#f9f5ed; }
+  td.num { text-align:right; }
+  .no-items { font-size:11px; color:#aaa; font-style:italic; }
+  .footer { margin-top:1.5rem; padding-top:.75rem; border-top:1px solid #ccc; display:flex; justify-content:space-between; font-size:10px; color:#888; }
+  @media print { body { padding:1cm; } .order-block { break-inside:avoid; } }
+</style></head><body>
+  <div class="header"><h1>Commandes fournisseurs</h1><p>Culturo SaaS — Exporté le ${date}</p></div>
+  ${orderBlocks}
+  <div class="footer"><span>Culturo SaaS</span><span>${date}</span></div>
+</body></html>`;
 
   const win = window.open('', '_blank');
   if (!win) return;
