@@ -13,6 +13,7 @@ import { Watering } from 'src/entities/watering.entity';
 import { Harvest } from 'src/entities/harvest.entity';
 import { Observation } from 'src/entities/observation.entity';
 import { UsersModule } from 'src/users/users.module';
+import { PlantStockModule } from 'src/plant-stock/plant-stock.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { UsersModule } from 'src/users/users.module';
       Observation,
     ]),
     UsersModule,
+    PlantStockModule,
   ],
   controllers: [RotationController],
   providers: [RotationService],

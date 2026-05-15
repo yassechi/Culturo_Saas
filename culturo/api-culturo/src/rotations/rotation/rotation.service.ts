@@ -17,6 +17,7 @@ import { FamilyIncompatibility } from 'src/entities/family_incompatibility.entit
 import { Watering } from 'src/entities/watering.entity';
 import { Harvest } from 'src/entities/harvest.entity';
 import { Observation } from 'src/entities/observation.entity';
+import { PlantStockService } from 'src/plant-stock/plant-stock.service';
 
 type PlantingSuccess = {
   status: 'OK';
@@ -165,6 +166,8 @@ export class RotationService {
 
     @InjectRepository(Observation)
     private observationRepository: Repository<Observation>,
+
+    private readonly plantStockService: PlantStockService,
   ) {}
 
   /**
@@ -1102,7 +1105,20 @@ export class RotationService {
         newSection,
       )) as unknown as Section;
 
-      // 7. Retourner le résultat (INCHANGÉ)
+      // 7. Décrémenter le stock si quantité plantée > 0 (non-bloquant)
+      if (quantityPlanted > 0) {
+        try {
+          await this.plantStockService.decrementStock(
+            vegetableIdFK,
+            varietyIdFK,
+            quantityPlanted,
+          );
+        } catch {
+          // Silencieux — le stock insuffisant ne bloque pas la plantation
+        }
+      }
+
+      // 8. Retourner le résultat (INCHANGÉ)
       const sectionWithRelations = await this.sectionRepository.findOne({
         where: { id_section: savedSection.id_section },
         relations: [
