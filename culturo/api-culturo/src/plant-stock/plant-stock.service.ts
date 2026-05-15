@@ -121,22 +121,34 @@ export class PlantStockService {
     quantity: number,
     exploitationId?: number,
   ): Promise<StockCheckResult> {
-    const qb = this.stockRepository
-      .createQueryBuilder('stock')
-      .leftJoin('stock.vegetable', 'vegetable')
-      .leftJoin('stock.variety', 'variety')
-      .leftJoin('stock.exploitation', 'exploitation')
-      .where('vegetable.id_vegetable = :vegetableId', { vegetableId })
-      .andWhere('stock.quantity > 0');
+    // Construire la requête de base : légume + quantité > 0
+    const baseQb = () =>
+      this.stockRepository
+        .createQueryBuilder('stock')
+        .leftJoin('stock.vegetable', 'vegetable')
+        .leftJoin('stock.variety', 'variety')
+        .leftJoin('stock.exploitation', 'exploitation')
+        .where('vegetable.id_vegetable = :vegetableId', { vegetableId })
+        .andWhere('stock.quantity > 0');
 
+    // 1. Stock exact : même variété (si varietyId fourni)
+    let entries: PlantStock[] = [];
     if (varietyId) {
-      qb.andWhere('variety.id_variety = :varietyId', { varietyId });
-    }
-    if (exploitationId) {
-      qb.andWhere('exploitation.id_exploitation = :exploitationId', { exploitationId });
+      entries = await baseQb()
+        .andWhere('variety.id_variety = :varietyId', { varietyId })
+        .getMany();
     }
 
-    const entries = await qb.getMany();
+    // 2. Fallback : tout stock pour ce légume (variété quelconque ou nulle)
+    //    On utilise ce fallback si : pas de varietyId, ou stock variété exact = 0
+    if (entries.length === 0) {
+      const qb = baseQb();
+      if (exploitationId) {
+        qb.andWhere('exploitation.id_exploitation = :exploitationId', { exploitationId });
+      }
+      entries = await qb.getMany();
+    }
+
     const total = entries.reduce((sum, e) => sum + e.quantity, 0);
 
     if (total <= 0) {
