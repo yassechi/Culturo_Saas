@@ -34,7 +34,17 @@
     <section v-if="activeTab === 'stock'" class="tab-content">
       <div class="section-toolbar">
         <input v-model="stockSearch" class="search-input" placeholder="Rechercher un légume…" />
-        <button class="primary-button" @click="store.openCreateStock()">+ Ajouter du stock</button>
+        <div class="toolbar-actions">
+          <button class="export-btn" title="Exporter en CSV" @click="exportStockCSV">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV
+          </button>
+          <button class="export-btn" title="Exporter en PDF" @click="exportStockPDF">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            PDF
+          </button>
+          <button class="primary-button" @click="store.openCreateStock()">+ Ajouter du stock</button>
+        </div>
       </div>
 
       <div v-if="store.loadingStock" class="loading-state">Chargement…</div>
@@ -553,6 +563,97 @@ function confirmDeleteStock(id: number) {
   if (confirm('Supprimer cette entrée de stock ?')) store.deleteStock(id);
 }
 
+// ── Exports ────────────────────────────────────────────────────────────────────
+function exportStockCSV() {
+  const headers = ['Légume', 'Variété', 'Quantité', 'Unité', 'Date réception', 'Exploitation', 'Notes'];
+  const rows = filteredStock.value.map(s => [
+    s.vegetable.vegetable_name,
+    s.variety?.variety_name ?? '',
+    s.quantity,
+    s.unit,
+    s.received_date ? formatDate(s.received_date) : '',
+    s.exploitation?.exploitation_name ?? 'Global',
+    s.notes ?? '',
+  ]);
+
+  const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = [headers, ...rows].map(row => row.map(escape).join(';')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `stock-plants-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportStockPDF() {
+  const rows = filteredStock.value.map(s => `
+    <tr>
+      <td>${s.vegetable.vegetable_name}</td>
+      <td>${s.variety?.variety_name ?? '—'}</td>
+      <td class="num ${s.quantity === 0 ? 'zero' : ''}">${s.quantity}</td>
+      <td>${s.unit}</td>
+      <td>${s.received_date ? formatDate(s.received_date) : '—'}</td>
+      <td>${s.exploitation?.exploitation_name ?? 'Global'}</td>
+      <td>${s.notes ?? ''}</td>
+    </tr>`).join('');
+
+  const total = filteredStock.value.reduce((sum, s) => sum + s.quantity, 0);
+  const date = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Stock de plants — ${date}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #1a2a1a; padding: 2cm; }
+  .header { margin-bottom: 1.5rem; border-bottom: 2px solid #274135; padding-bottom: 0.75rem; }
+  .header h1 { font-size: 20px; color: #274135; margin-bottom: 4px; }
+  .header p { color: #666; font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th { background: #274135; color: #fffdf8; text-align: left; padding: 8px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  td { padding: 7px 10px; border-bottom: 1px solid #e8e0d0; vertical-align: middle; }
+  tr:nth-child(even) td { background: #f9f5ed; }
+  td.num { text-align: right; font-weight: 700; }
+  td.zero { color: #c0392b; }
+  .footer { margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid #ccc; display: flex; justify-content: space-between; font-size: 10px; color: #888; }
+  .summary { margin-top: 0.75rem; font-size: 11px; color: #555; }
+  @media print { body { padding: 1cm; } }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>Stock de plants</h1>
+    <p>Culturo SaaS — Exporté le ${date}</p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Légume</th><th>Variété</th><th>Quantité</th><th>Unité</th>
+        <th>Date réception</th><th>Exploitation</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="summary">${filteredStock.value.length} entrée(s) · Total : ${total} plants</div>
+  <div class="footer">
+    <span>Culturo SaaS</span>
+    <span>${date}</span>
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 400);
+}
+
 function confirmDeleteSupplier(id: number) {
   if (confirm('Supprimer ce fournisseur ?')) store.deleteSupplier(id);
 }
@@ -662,6 +763,32 @@ onMounted(async () => {
   gap: 1rem;
   margin-bottom: 1.25rem;
   flex-wrap: wrap;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border: 1.5px solid rgba(39, 65, 53, 0.22);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--brand-deep, #274135);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms, border-color 140ms;
+}
+.export-btn:hover {
+  background: rgba(39, 65, 53, 0.07);
+  border-color: rgba(39, 65, 53, 0.4);
 }
 
 .search-input, .form-input, .form-select {
