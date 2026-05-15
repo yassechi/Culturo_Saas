@@ -23,6 +23,10 @@ import { Variety } from './entities/variety.entity';
 import { Observation } from './entities/observation.entity';
 import { FamilyIncompatibility } from './entities/family_incompatibility.entity';
 import { UserGroup } from './entities/user_group.entity';
+import { Supplier } from './entities/supplier.entity';
+import { PlantStock } from './entities/plant_stock.entity';
+import { SupplierOrder } from './entities/supplier_order.entity';
+import { SupplierOrderItem } from './entities/supplier_order_item.entity';
 
 export const AppDataSourceOptions: DataSourceOptions = {
   type: 'postgres',
@@ -55,6 +59,10 @@ export const AppDataSourceOptions: DataSourceOptions = {
     Observation,
     FamilyIncompatibility,
     UserGroup,
+    Supplier,
+    PlantStock,
+    SupplierOrder,
+    SupplierOrderItem,
   ],
   synchronize: process.env.NODE_ENV !== 'production',
 };
