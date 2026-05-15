@@ -54,7 +54,22 @@
         <button class="primary-button" @click="store.openCreateStock()">Ajouter des plants</button>
       </div>
 
-      <div v-else class="stock-table-wrap">
+      <!-- Résumé stock -->
+      <div v-if="filteredStock.length" class="stock-summary">
+        <span class="stock-summary-item">
+          <strong>{{ filteredStock.length }}</strong> entrée{{ filteredStock.length !== 1 ? 's' : '' }}
+        </span>
+        <span class="stock-summary-sep">·</span>
+        <span class="stock-summary-item">
+          <strong>{{ new Set(filteredStock.map(s => s.vegetable.id_vegetable)).size }}</strong> légume{{ new Set(filteredStock.map(s => s.vegetable.id_vegetable)).size !== 1 ? 's' : '' }} distincts
+        </span>
+        <span class="stock-summary-sep">·</span>
+        <span class="stock-summary-item stock-summary-warn" v-if="filteredStock.filter(s => s.quantity === 0).length">
+          ⚠ {{ filteredStock.filter(s => s.quantity === 0).length }} à stock zéro
+        </span>
+      </div>
+
+      <div v-if="filteredStock.length" class="stock-table-wrap">
         <table class="data-table">
           <thead>
             <tr>
@@ -78,8 +93,15 @@
               <td>{{ s.exploitation?.exploitation_name ?? 'Global' }}</td>
               <td class="cell-notes">{{ s.notes ?? '' }}</td>
               <td class="cell-actions">
-                <button class="btn-icon" title="Modifier" @click="store.openEditStock(s)">✏️</button>
-                <button class="btn-icon btn-danger" title="Supprimer" @click="confirmDeleteStock(s.id_stock)">🗑</button>
+                <template v-if="deleteStockPending === s.id_stock">
+                  <span class="inline-confirm-text">Supprimer ?</span>
+                  <button class="btn-icon btn-danger" @click="doDeleteStock(s.id_stock)">✓</button>
+                  <button class="btn-icon" @click="deleteStockPending = null">✕</button>
+                </template>
+                <template v-else>
+                  <button class="btn-icon" title="Modifier" @click="store.openEditStock(s)">✏️</button>
+                  <button class="btn-icon btn-danger" title="Supprimer" @click="confirmDeleteStock(s.id_stock)">🗑</button>
+                </template>
               </td>
             </tr>
           </tbody>
@@ -90,7 +112,7 @@
     <!-- ═══════════════════════════════════════ TAB: FOURNISSEURS ═════════════ -->
     <section v-else-if="activeTab === 'suppliers'" class="tab-content">
       <div class="section-toolbar">
-        <span class="toolbar-info">{{ store.suppliers.length }} fournisseur(s)</span>
+        <input v-model="supplierSearch" class="search-input" placeholder="Rechercher un fournisseur…" />
         <div class="toolbar-actions">
           <button class="export-btn" title="Exporter en CSV" @click="exportSuppliersCSV">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -113,7 +135,7 @@
 
       <div v-else class="suppliers-grid">
         <div
-          v-for="s in store.suppliers"
+          v-for="s in filteredSuppliers"
           :key="s.id_supplier"
           class="supplier-card"
           :class="{ inactive: !s.supplier_active }"
@@ -127,13 +149,20 @@
           <div class="supplier-card-body">
             <p v-if="s.contact_email">✉ {{ s.contact_email }}</p>
             <p v-if="s.contact_phone">📞 {{ s.contact_phone }}</p>
-            <a v-if="s.website" :href="s.website" target="_blank" rel="noopener" class="supplier-link">
-              🌐 {{ s.website }}
-            </a>
+            <a v-if="s.website" :href="s.website" target="_blank" rel="noopener" class="supplier-link">🌐 {{ s.website }}</a>
+            <p class="supplier-orders-count" @click="goToSupplierOrders(s.id_supplier)">
+              📦 {{ supplierOrderCount(s.id_supplier) }} commande{{ supplierOrderCount(s.id_supplier) !== 1 ? 's' : '' }}
+            </p>
           </div>
           <div class="supplier-card-actions">
+            <button class="btn-sm btn-sm-link" @click="goToSupplierOrders(s.id_supplier)">Voir commandes</button>
             <button class="btn-sm" @click="store.openEditSupplier(s)">Modifier</button>
-            <button class="btn-sm btn-sm-danger" @click="confirmDeleteSupplier(s.id_supplier)">Supprimer</button>
+            <template v-if="deleteSupplierPending === s.id_supplier">
+              <span class="inline-confirm-text">Confirmer ?</span>
+              <button class="btn-sm btn-sm-danger" @click="doDeleteSupplier(s.id_supplier)">Oui</button>
+              <button class="btn-sm" @click="deleteSupplierPending = null">Non</button>
+            </template>
+            <button v-else class="btn-sm btn-sm-danger" @click="confirmDeleteSupplier(s.id_supplier)">Supprimer</button>
           </div>
         </div>
       </div>
@@ -141,27 +170,50 @@
 
     <!-- ═══════════════════════════════════════ TAB: COMMANDES ═══════════════ -->
     <section v-else-if="activeTab === 'orders'" class="tab-content">
-      <div class="section-toolbar">
-        <div class="status-filters">
-          <button
-            v-for="f in statusFilters"
-            :key="f.value"
-            class="filter-pill"
-            :class="{ active: orderStatusFilter === f.value }"
-            @click="orderStatusFilter = f.value"
-          >{{ f.label }}</button>
+      <div class="orders-header">
+
+        <!-- Ligne 1 : statuts (gauche) + actions (droite) -->
+        <div class="orders-row-top">
+          <div class="status-filters">
+            <button
+              v-for="f in statusFilters"
+              :key="f.value"
+              class="filter-pill"
+              :class="{ active: orderStatusFilter === f.value }"
+              @click="orderStatusFilter = f.value"
+            >{{ f.label }}</button>
+          </div>
+          <div class="orders-actions">
+            <button class="export-btn" title="Exporter en CSV" @click="exportOrdersCSV">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              CSV
+            </button>
+            <button class="export-btn" title="Exporter en PDF" @click="exportOrdersPDF">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              PDF
+            </button>
+            <button class="primary-button" @click="store.openCreateOrder()">+ Nouvelle commande</button>
+          </div>
         </div>
-        <div class="toolbar-actions">
-          <button class="export-btn" title="Exporter en CSV" @click="exportOrdersCSV">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            CSV
-          </button>
-          <button class="export-btn" title="Exporter en PDF" @click="exportOrdersPDF">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            PDF
-          </button>
-          <button class="primary-button" @click="store.openCreateOrder()">+ Nouvelle commande</button>
+
+        <!-- Ligne 2 : filtres date + fournisseur + reset + compteur -->
+        <div class="orders-row-filters">
+          <div class="filter-inline-group">
+            <span class="filter-inline-label">Du</span>
+            <input v-model="orderDateFrom" type="date" class="filter-date-inline" />
+            <span class="filter-inline-label">au</span>
+            <input v-model="orderDateTo" type="date" class="filter-date-inline" />
+          </div>
+          <select v-model="orderSupplierFilter" class="filter-select-inline">
+            <option :value="null">Tous les fournisseurs</option>
+            <option v-for="s in store.suppliers" :key="s.id_supplier" :value="s.id_supplier">
+              {{ s.supplier_name }}
+            </option>
+          </select>
+          <button v-if="hasActiveOrderFilters" class="reset-filters-btn" @click="resetOrderFilters" title="Réinitialiser">✕</button>
+          <span class="orders-count">{{ filteredOrders.length }} résultat{{ filteredOrders.length !== 1 ? 's' : '' }}</span>
         </div>
+
       </div>
 
       <div v-if="store.loadingOrders" class="loading-state">Chargement…</div>
@@ -170,84 +222,200 @@
         <p>Aucune commande.</p>
       </div>
 
+      <!-- Confirmation inline de réception -->
+      <div v-if="receiveOrderPending !== null" class="inline-receive-confirm">
+        <div class="inline-receive-inner">
+          <p class="inline-receive-title">✅ Confirmer la réception ?</p>
+          <p class="inline-receive-sub">Le stock sera automatiquement mis à jour avec les quantités commandées.</p>
+          <ul class="inline-receive-items">
+            <li v-for="item in store.orders.find(o => o.id_supplier_order === receiveOrderPending)?.items ?? []" :key="item.id_item">
+              {{ item.vegetable.vegetable_name }}<span v-if="item.variety"> – {{ item.variety.variety_name }}</span> : <strong>{{ item.quantity_ordered }} {{ item.unit }}</strong>
+            </li>
+          </ul>
+          <div class="inline-receive-actions">
+            <button class="btn-receive" @click="doReceiveOrder(receiveOrderPending!)">Confirmer → stock mis à jour</button>
+            <button class="secondary-button" @click="receiveOrderPending = null">Annuler</button>
+          </div>
+        </div>
+      </div>
+
       <div v-else class="orders-list">
         <div
           v-for="order in filteredOrders"
           :key="order.id_supplier_order"
           class="order-card"
         >
-          <div class="order-card-head">
+          <!-- En-tête cliquable pour collapse -->
+          <div class="order-card-head" @click="toggleOrderCollapse(order.id_supplier_order)" style="cursor:pointer">
             <div class="order-meta">
+              <span class="order-collapse-icon">{{ isCollapsed(order.id_supplier_order) ? '▶' : '▼' }}</span>
               <span class="order-supplier">{{ order.supplier.supplier_name }}</span>
               <span class="order-date">{{ formatDate(order.order_date) }}</span>
               <span v-if="order.expected_date" class="order-expected">
                 Livraison prévue : {{ formatDate(order.expected_date) }}
               </span>
+              <span class="order-items-count">{{ order.items.length }} article{{ order.items.length !== 1 ? 's' : '' }}</span>
             </div>
             <span class="order-status-badge" :class="`status-${order.status}`">
               {{ statusLabel(order.status) }}
             </span>
           </div>
 
-          <!-- Items list -->
-          <table v-if="order.items.length" class="items-table">
-            <thead>
-              <tr>
-                <th>Légume</th>
-                <th>Variété</th>
-                <th>Commandé</th>
-                <th>Reçu</th>
-                <th>Unité</th>
-                <th>Prix unit.</th>
-                <th v-if="order.status === 'draft'"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in order.items" :key="item.id_item">
-                <td>{{ item.vegetable.vegetable_name }}</td>
-                <td>{{ item.variety?.variety_name ?? '—' }}</td>
-                <td>{{ item.quantity_ordered }}</td>
-                <td>{{ item.quantity_received }}</td>
-                <td>{{ item.unit }}</td>
-                <td>{{ item.unit_price ?? '—' }}</td>
-                <td v-if="order.status === 'draft'">
-                  <button class="btn-icon btn-danger" @click="store.removeOrderItem(order.id_supplier_order, item.id_item)">🗑</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-else class="order-empty-items">Aucune ligne — ajoutez des légumes à commander.</p>
+          <!-- Contenu collapsible -->
+          <template v-if="!isCollapsed(order.id_supplier_order)">
+            <!-- Items list -->
+            <table v-if="order.items.length" class="items-table">
+              <thead>
+                <tr>
+                  <th>Légume</th>
+                  <th>Variété</th>
+                  <th>Commandé</th>
+                  <th>Reçu</th>
+                  <th>Unité</th>
+                  <th>Prix unit. HT</th>
+                  <th class="col-total">Total HT</th>
+                  <th v-if="order.status === 'draft'"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in order.items" :key="item.id_item">
+                  <td>{{ item.vegetable.vegetable_name }}</td>
+                  <td>{{ item.variety?.variety_name ?? '—' }}</td>
+                  <td>{{ item.quantity_ordered }}</td>
+                  <td>{{ item.quantity_received }}</td>
+                  <td>{{ item.unit }}</td>
+                  <td>{{ item.unit_price ?? '—' }}</td>
+                  <td class="col-total">
+                    {{ item.unit_price ? formatPrice(parseFloat(String(item.unit_price).replace(',','.')) * item.quantity_ordered) : '—' }}
+                  </td>
+                  <td v-if="order.status === 'draft'">
+                    <button class="btn-icon btn-danger" @click="store.removeOrderItem(order.id_supplier_order, item.id_item)">🗑</button>
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot v-if="orderTotals(order.items)">
+                <tr class="tfoot-ht">
+                  <td colspan="6" class="tfoot-label">Total HT</td>
+                  <td class="tfoot-value">{{ formatPrice(orderTotals(order.items)!.ht) }}</td>
+                  <td v-if="order.status === 'draft'"></td>
+                </tr>
+                <tr v-if="orderTotals(order.items)!.tva !== null" class="tfoot-tva">
+                  <td colspan="6" class="tfoot-label">TVA ({{ orderTotals(order.items)!.tvaRate }}%)</td>
+                  <td class="tfoot-value">{{ formatPrice(orderTotals(order.items)!.tva!) }}</td>
+                  <td v-if="order.status === 'draft'"></td>
+                </tr>
+                <tr v-if="orderTotals(order.items)!.ttc !== null" class="tfoot-ttc">
+                  <td colspan="6" class="tfoot-label">Total TTC</td>
+                  <td class="tfoot-value">{{ formatPrice(orderTotals(order.items)!.ttc!) }}</td>
+                  <td v-if="order.status === 'draft'"></td>
+                </tr>
+              </tfoot>
+            </table>
+            <p v-else class="order-empty-items">Aucune ligne — ajoutez des légumes à commander.</p>
 
-          <div v-if="order.notes" class="order-notes">📝 {{ order.notes }}</div>
+            <div v-if="order.notes" class="order-notes">📝 {{ order.notes }}</div>
 
-          <div class="order-card-actions">
-            <!-- Actions brouillon -->
-            <template v-if="order.status === 'draft'">
-              <button class="btn-sm" @click="store.openAddItem(order.id_supplier_order)">+ Ligne</button>
-              <button class="btn-sm" @click="store.openEditOrder(order)">✏️ Modifier</button>
-              <button class="btn-sm btn-sm-action" @click="store.updateOrderStatus(order.id_supplier_order, 'sent')">📤 Envoyer</button>
-              <button class="btn-sm btn-sm-danger" @click="store.updateOrderStatus(order.id_supplier_order, 'cancelled')">Annuler</button>
-            </template>
+            <div class="order-card-actions">
+              <!-- Brouillon -->
+              <template v-if="order.status === 'draft'">
+                <button class="btn-sm" @click="store.openAddItem(order.id_supplier_order)">+ Ligne</button>
+                <button class="btn-sm" @click="store.openEditOrder(order)">✏️ Modifier</button>
+                <button class="btn-sm btn-sm-action" @click="store.updateOrderStatus(order.id_supplier_order, 'sent')">📤 Envoyer</button>
+                <button class="btn-sm btn-sm-danger" @click="store.updateOrderStatus(order.id_supplier_order, 'cancelled')">Annuler</button>
+              </template>
 
-            <!-- Bouton de confirmation de réception (prominant) -->
-            <button
-              v-if="order.status === 'sent'"
-              class="btn-receive"
-              @click="confirmReceiveOrder(order.id_supplier_order)"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              Confirmer la réception → stock mis à jour
+              <!-- Envoyée -->
+              <template v-if="order.status === 'sent'">
+                <button class="btn-receive" @click="confirmReceiveOrder(order.id_supplier_order)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Confirmer la réception
+                </button>
+                <button class="btn-sm btn-sm-danger" @click="store.updateOrderStatus(order.id_supplier_order, 'cancelled')">Annuler la commande</button>
+              </template>
+
+              <!-- Suppression inline -->
+              <template v-if="order.status !== 'received' && order.status !== 'cancelled'">
+                <template v-if="deleteOrderPending === order.id_supplier_order">
+                  <span class="inline-confirm-text">Supprimer ?</span>
+                  <button class="btn-sm btn-sm-danger" @click="doDeleteOrder(order.id_supplier_order)">Oui</button>
+                  <button class="btn-sm" @click="deleteOrderPending = null">Non</button>
+                </template>
+                <button v-else class="btn-sm btn-sm-danger" @click="confirmDeleteOrder(order.id_supplier_order)">🗑</button>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════ TAB: RÉGLAGES ════════════════ -->
+    <section v-else-if="activeTab === 'settings'" class="tab-content">
+      <div class="settings-page">
+        <div class="settings-header">
+          <h3 class="settings-title">Réglages généraux</h3>
+          <div class="settings-save-bar">
+            <div v-if="store.settingsSaved" class="settings-success">✓ Sauvegardé</div>
+            <div v-if="store.settingsError" class="settings-error">{{ store.settingsError }}</div>
+            <button class="primary-button" :disabled="store.settingsSaving" @click="saveAllSettings">
+              {{ store.settingsSaving ? 'Sauvegarde…' : '💾 Sauvegarder tout' }}
             </button>
+          </div>
+        </div>
 
-            <template v-if="order.status === 'sent'">
-              <button class="btn-sm btn-sm-danger" @click="store.updateOrderStatus(order.id_supplier_order, 'cancelled')">Annuler</button>
-            </template>
+        <!-- Société -->
+        <div class="settings-group">
+          <h4 class="settings-group-title">Société</h4>
+          <p class="settings-group-hint">Ces informations apparaissent dans les bons de commande envoyés aux fournisseurs.</p>
+          <div class="settings-fields-grid">
+            <div class="settings-field">
+              <label class="settings-label">Nom de la société</label>
+              <input v-model="companyNameInput" type="text" class="settings-input" placeholder="Culturo" />
+            </div>
+            <div class="settings-field">
+              <label class="settings-label">Adresse</label>
+              <input v-model="companyAddressInput" type="text" class="settings-input" placeholder="12 rue des jardins" />
+            </div>
+            <div class="settings-field">
+              <label class="settings-label">Code postal / Ville</label>
+              <input v-model="companyZipCityInput" type="text" class="settings-input" placeholder="75001 Paris" />
+            </div>
+            <div class="settings-field">
+              <label class="settings-label">Pays</label>
+              <input v-model="companyCountryInput" type="text" class="settings-input" placeholder="France" />
+            </div>
+          </div>
+        </div>
 
-            <button
-              v-if="order.status !== 'received' && order.status !== 'cancelled'"
-              class="btn-sm btn-sm-danger"
-              @click="confirmDeleteOrder(order.id_supplier_order)"
-            >🗑</button>
+        <!-- Contact -->
+        <div class="settings-group">
+          <h4 class="settings-group-title">Contact</h4>
+          <div class="settings-field">
+            <label class="settings-label">Email de contact</label>
+            <p class="settings-hint">Affiché dans les bons de commande fournisseur et utilisé comme adresse de réponse (reply-to).</p>
+            <input v-model="contactEmailInput" type="email" class="settings-input" style="max-width:300px" placeholder="culturotech@gmail.com" />
+          </div>
+        </div>
+
+        <!-- Fiscalité -->
+        <div class="settings-group">
+          <h4 class="settings-group-title">Fiscalité</h4>
+          <div class="settings-row">
+            <div class="settings-field">
+              <label class="settings-label">Taux de TVA (%)</label>
+              <p class="settings-hint">Appliqué au total HT dans les emails de commande et dans les totaux de l'interface.</p>
+              <div class="settings-input-row">
+                <input v-model="tvaRateInput" type="number" min="0" max="100" step="0.1" class="settings-input" placeholder="20" style="width:100px" />
+                <span class="settings-unit">%</span>
+              </div>
+            </div>
+            <div class="settings-preview">
+              <p class="settings-preview-title">Aperçu sur 100 €</p>
+              <div class="settings-preview-box">
+                <div class="preview-row"><span>Total HT</span><span>100,00 €</span></div>
+                <div class="preview-row preview-tva"><span>TVA ({{ tvaRateInput || 0 }}%)</span><span>{{ tvaPreview }} €</span></div>
+                <div class="preview-row preview-ttc"><span>Total TTC</span><span>{{ ttcPreview }} €</span></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -420,7 +588,7 @@
                       <th>Variété</th>
                       <th>Quantité</th>
                       <th>Unité</th>
-                      <th>Prix unit.</th>
+                      <th>Prix unit. HT</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -467,6 +635,22 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              <!-- Totaux du modal -->
+              <div v-if="draftTotals()" class="draft-totals">
+                <div class="draft-totals-row">
+                  <span>Total HT</span>
+                  <span>{{ formatPrice(draftTotals()!.ht) }}</span>
+                </div>
+                <div v-if="draftTotals()!.tva !== null" class="draft-totals-row draft-totals-tva">
+                  <span>TVA ({{ draftTotals()!.tvaRate }}%)</span>
+                  <span>{{ formatPrice(draftTotals()!.tva!) }}</span>
+                </div>
+                <div v-if="draftTotals()!.ttc !== null" class="draft-totals-row draft-totals-ttc">
+                  <span>Total TTC</span>
+                  <span>{{ formatPrice(draftTotals()!.ttc!) }}</span>
+                </div>
               </div>
             </div>
 
@@ -547,7 +731,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { usePlantManagementStore } from '@/stores/plantManagement';
 import { useBotanicalStore } from '@/stores/botanical';
 import { useSoilBoardsStore } from '@/stores/soilBoards';
@@ -558,9 +742,91 @@ const botanicalStore = useBotanicalStore();
 const soilBoardsStore = useSoilBoardsStore();
 const authStore = useAuthStore();
 
-const activeTab = ref<'stock' | 'suppliers' | 'orders'>('stock');
+const activeTab = ref<'stock' | 'suppliers' | 'orders' | 'settings'>('stock');
 const stockSearch = ref('');
+const supplierSearch = ref('');
+
+// Fournisseurs filtrés + stats
+const filteredSuppliers = computed(() => {
+  const q = supplierSearch.value.toLowerCase().trim();
+  return q ? store.suppliers.filter(s => s.supplier_name.toLowerCase().includes(q) || s.contact_email?.toLowerCase().includes(q)) : store.suppliers;
+});
+
+function supplierOrderCount(supplierId: number) {
+  return store.orders.filter(o => o.supplier.id_supplier === supplierId).length;
+}
+
+function goToSupplierOrders(supplierId: number) {
+  activeTab.value = 'orders';
+  orderSupplierFilter.value = supplierId;
+}
+
+// Collapse des cartes commande
+const collapsedOrders = ref<Record<number, boolean>>({});
+function toggleOrderCollapse(id: number) {
+  collapsedOrders.value = { ...collapsedOrders.value, [id]: !collapsedOrders.value[id] };
+}
+function isCollapsed(id: number) { return !!collapsedOrders.value[id]; }
+
+// ── Filtres commandes ─────────────────────────────────────────────────────────
 const orderStatusFilter = ref<string>('all');
+const orderDateFrom = ref<string>('');
+const orderDateTo = ref<string>('');
+const orderSupplierFilter = ref<number | null>(null);
+
+const statusFilters = [
+  { value: 'all', label: 'Toutes' },
+  { value: 'draft', label: 'Brouillons' },
+  { value: 'sent', label: 'Envoyées' },
+  { value: 'received', label: 'Reçues' },
+  { value: 'cancelled', label: 'Annulées' },
+];
+
+const hasActiveOrderFilters = computed(() =>
+  orderStatusFilter.value !== 'all' ||
+  orderDateFrom.value !== '' ||
+  orderDateTo.value !== '' ||
+  orderSupplierFilter.value !== null,
+);
+
+function resetOrderFilters() {
+  orderStatusFilter.value = 'all';
+  orderDateFrom.value = '';
+  orderDateTo.value = '';
+  orderSupplierFilter.value = null;
+}
+
+
+// ── Réglages ──────────────────────────────────────────────────────────────────
+const contactEmailInput = ref('');
+const tvaRateInput = ref<number | string>('');
+const companyNameInput = ref('');
+const companyAddressInput = ref('');
+const companyZipCityInput = ref('');
+const companyCountryInput = ref('');
+
+const tvaPreview = computed(() => {
+  const rate = parseFloat(String(tvaRateInput.value));
+  return isNaN(rate) ? '0,00' : (rate).toFixed(2).replace('.', ',');
+});
+const ttcPreview = computed(() => {
+  const rate = parseFloat(String(tvaRateInput.value));
+  return isNaN(rate) ? '100,00' : (100 + rate).toFixed(2).replace('.', ',');
+});
+
+async function saveAllSettings() {
+  const fields: Record<string, string> = {
+    contact_email: contactEmailInput.value.trim(),
+    tva_rate: String(tvaRateInput.value),
+    company_name: companyNameInput.value.trim(),
+    company_address: companyAddressInput.value.trim(),
+    company_zip_city: companyZipCityInput.value.trim(),
+    company_country: companyCountryInput.value.trim(),
+  };
+  for (const [key, value] of Object.entries(fields)) {
+    await store.saveSetting(key, value);
+  }
+}
 
 const tabs = computed(() => [
   {
@@ -581,15 +847,13 @@ const tabs = computed(() => [
     icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
     count: store.pendingOrders.length,
   },
+  {
+    key: 'settings',
+    label: 'Réglages',
+    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  },
 ]);
 
-const statusFilters = [
-  { value: 'all', label: 'Toutes' },
-  { value: 'draft', label: 'Brouillons' },
-  { value: 'sent', label: 'Envoyées' },
-  { value: 'received', label: 'Reçues' },
-  { value: 'cancelled', label: 'Annulées' },
-];
 
 // Exploitations pour le select
 const exploitations = computed(() => soilBoardsStore.exploitations);
@@ -602,12 +866,18 @@ const filteredStock = computed(() => {
     : store.stock;
 });
 
-// Filtrage des commandes
-const filteredOrders = computed(() =>
-  orderStatusFilter.value === 'all'
-    ? store.orders
-    : store.orders.filter((o) => o.status === orderStatusFilter.value),
-);
+// Filtrage des commandes (ordre : plus récentes en premier)
+const filteredOrders = computed(() => {
+  const dateFrom = orderDateFrom.value;
+  const dateTo = orderDateTo.value;
+  return store.orders.filter((o) => {
+    if (orderStatusFilter.value !== 'all' && o.status !== orderStatusFilter.value) return false;
+    if (orderSupplierFilter.value !== null && o.supplier.id_supplier !== orderSupplierFilter.value) return false;
+    if (dateFrom && o.order_date < dateFrom) return false;
+    if (dateTo && o.order_date > dateTo) return false;
+    return true;
+  });
+});
 
 // Variétés selon légume sélectionné (pour le stock modal)
 const varietiesForSelected = computed(() => {
@@ -624,6 +894,31 @@ const varietiesForItem = computed(() => {
   const veg = botanicalStore.vegetables.find((v) => v.id_vegetable === vegId);
   return veg?.varieties ?? botanicalStore.varietiesMap[vegId] ?? [];
 });
+
+// ── Calcul des totaux HT / TVA / TTC ─────────────────────────────────────────
+function orderTotals(items: { quantity_ordered: number; unit_price?: string | null }[]) {
+  const tvaRate = parseFloat(String(store.settings['tva_rate'] ?? '0')) || 0;
+  let ht: number | null = null;
+  for (const item of items) {
+    const price = item.unit_price ? parseFloat(String(item.unit_price).replace(',', '.')) : NaN;
+    if (!isNaN(price)) ht = (ht ?? 0) + price * item.quantity_ordered;
+  }
+  if (ht === null) return null;
+  const tva = tvaRate > 0 ? ht * tvaRate / 100 : null;
+  const ttc = tva !== null ? ht + tva : null;
+  return { ht, tva, tvaRate, ttc };
+}
+
+function draftTotals() {
+  return orderTotals(store.orderDraftItems.map(i => ({
+    quantity_ordered: i.quantity_ordered,
+    unit_price: i.unit_price,
+  })));
+}
+
+function formatPrice(v: number) {
+  return v.toFixed(2).replace('.', ',') + ' €';
+}
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -653,14 +948,19 @@ function onDraftVegetableChange(item: { id_vegetable: number | null; id_variety:
 
 // ── Confirmation de réception ─────────────────────────────────────────────────
 function confirmReceiveOrder(id: number) {
-  if (confirm('Confirmer la réception de cette commande ? Le stock sera mis à jour automatiquement.')) {
-    store.updateOrderStatus(id, 'received');
-  }
+  const order = store.orders.find((o) => o.id_supplier_order === id);
+  if (!order?.items.length) return;
+  receiveOrderPending.value = id;
 }
 
-function confirmDeleteStock(id: number) {
-  if (confirm('Supprimer cette entrée de stock ?')) store.deleteStock(id);
-}
+// ── Inline confirmations ──────────────────────────────────────────────────────
+const deleteStockPending = ref<number | null>(null);
+const deleteSupplierPending = ref<number | null>(null);
+const deleteOrderPending = ref<number | null>(null);
+const receiveOrderPending = ref<number | null>(null);
+
+function confirmDeleteStock(id: number) { deleteStockPending.value = id; }
+function doDeleteStock(id: number) { store.deleteStock(id); deleteStockPending.value = null; }
 
 // ── Exports ────────────────────────────────────────────────────────────────────
 function exportStockCSV() {
@@ -937,13 +1237,33 @@ function exportOrdersPDF() {
   setTimeout(() => { win.print(); }, 400);
 }
 
-function confirmDeleteSupplier(id: number) {
-  if (confirm('Supprimer ce fournisseur ?')) store.deleteSupplier(id);
+function confirmDeleteSupplier(id: number) { deleteSupplierPending.value = id; }
+async function doDeleteSupplier(id: number) { await store.deleteSupplier(id); deleteSupplierPending.value = null; }
+
+function confirmDeleteOrder(id: number) { deleteOrderPending.value = id; }
+async function doDeleteOrder(id: number) { await store.deleteOrder(id); deleteOrderPending.value = null; }
+
+async function doReceiveOrder(id: number) {
+  await store.updateOrderStatus(id, 'received');
+  receiveOrderPending.value = null;
+  if (!store.error) activeTab.value = 'stock';
 }
 
-function confirmDeleteOrder(id: number) {
-  if (confirm('Supprimer cette commande ?')) store.deleteOrder(id);
-}
+// Rechargement automatique au changement d'onglet
+watch(activeTab, async (tab) => {
+  if (tab === 'stock') await store.loadStock();
+  else if (tab === 'suppliers') await store.loadSuppliers();
+  else if (tab === 'orders') await store.loadOrders();
+  else if (tab === 'settings') {
+    await store.loadSettings();
+    tvaRateInput.value = store.settings['tva_rate'] ?? '20';
+    contactEmailInput.value = store.settings['contact_email'] ?? '';
+    companyNameInput.value = store.settings['company_name'] ?? '';
+    companyAddressInput.value = store.settings['company_address'] ?? '';
+    companyZipCityInput.value = store.settings['company_zip_city'] ?? '';
+    companyCountryInput.value = store.settings['company_country'] ?? '';
+  }
+});
 
 onMounted(async () => {
   await Promise.all([
@@ -951,6 +1271,12 @@ onMounted(async () => {
     botanicalStore.loadAll(),
     soilBoardsStore.loadAll(),
   ]);
+  tvaRateInput.value = store.settings['tva_rate'] ?? '20';
+  contactEmailInput.value = store.settings['contact_email'] ?? '';
+  companyNameInput.value = store.settings['company_name'] ?? '';
+  companyAddressInput.value = store.settings['company_address'] ?? '';
+  companyZipCityInput.value = store.settings['company_zip_city'] ?? '';
+  companyCountryInput.value = store.settings['company_country'] ?? '';
 });
 </script>
 
@@ -1277,6 +1603,49 @@ onMounted(async () => {
   vertical-align: middle;
   border-bottom: 1px solid rgba(39, 65, 53, 0.06);
 }
+
+/* Totaux dans le modal */
+.draft-totals {
+  margin-top: .75rem;
+  border: 1px solid rgba(39,65,53,.12);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: .9rem;
+  align-self: flex-end;
+  min-width: 240px;
+  float: right;
+}
+.draft-totals-row {
+  display: flex;
+  justify-content: space-between;
+  padding: .5rem .9rem;
+  border-bottom: 1px solid rgba(39,65,53,.07);
+}
+.draft-totals-row:last-child { border-bottom: none; }
+.draft-totals-tva { color: #777; font-size: .85rem; }
+.draft-totals-ttc { background: rgba(39,65,53,.06); font-weight: 700; font-size: .95rem; }
+
+/* Totaux dans les cartes commande */
+.col-total { text-align: right; }
+tfoot .tfoot-label {
+  text-align: right;
+  padding: .5rem .75rem;
+  font-size: .85rem;
+  color: #555;
+}
+tfoot .tfoot-value {
+  text-align: right;
+  padding: .5rem .75rem;
+  font-size: .85rem;
+}
+tfoot .tfoot-ht { background: rgba(39,65,53,.04); }
+tfoot .tfoot-tva { color: #777; font-size: .8rem; }
+tfoot .tfoot-ttc {
+  background: rgba(39,65,53,.08);
+  font-weight: 700;
+}
+tfoot .tfoot-ttc .tfoot-label,
+tfoot .tfoot-ttc .tfoot-value { font-size: .95rem; color: #1b4332; }
 .cell-select {
   width: 100%;
   padding: 0.35rem 0.5rem;
@@ -1311,7 +1680,40 @@ onMounted(async () => {
 }
 .btn-remove-row:hover { background: rgba(220, 38, 38, 0.08); }
 
-/* Orders */
+/* Orders — layout */
+.orders-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.orders-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.orders-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.orders-row-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.75rem;
+  background: rgba(39, 65, 53, 0.04);
+  border: 1px solid rgba(39, 65, 53, 0.1);
+  border-radius: 8px;
+}
+
 .status-filters { display: flex; gap: 0.35rem; flex-wrap: wrap; }
 .filter-pill {
   padding: 0.3rem 0.75rem;
@@ -1329,6 +1731,88 @@ onMounted(async () => {
   border-color: var(--brand-olive, #3a5c2e);
   color: #fff;
 }
+
+.toolbar-sep {
+  width: 1px;
+  height: 1.5rem;
+  background: rgba(39, 65, 53, 0.15);
+  flex-shrink: 0;
+}
+
+.filter-inline-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.filter-inline-label {
+  font-size: 0.78rem;
+  color: var(--text-muted, #6b7280);
+  white-space: nowrap;
+}
+.filter-date-inline {
+  height: 2rem;
+  padding: 0 0.45rem;
+  border: 1.5px solid rgba(39, 65, 53, 0.18);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.8rem;
+  color: #1f2937;
+  cursor: pointer;
+  transition: border-color 120ms;
+  width: 130px;
+}
+.filter-date-inline:focus {
+  outline: none;
+  border-color: var(--brand-olive, #3a5c2e);
+}
+
+.filter-select-inline {
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1.5px solid rgba(39, 65, 53, 0.18);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.8rem;
+  color: #1f2937;
+  cursor: pointer;
+  transition: border-color 120ms;
+  max-width: 170px;
+}
+.filter-select-inline:focus {
+  outline: none;
+  border-color: var(--brand-olive, #3a5c2e);
+}
+
+.reset-filters-btn {
+  height: 2rem;
+  width: 2rem;
+  padding: 0;
+  border-radius: 6px;
+  border: 1.5px solid rgba(220, 38, 38, 0.3);
+  background: rgba(220, 38, 38, 0.06);
+  color: #dc2626;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 120ms;
+  flex-shrink: 0;
+}
+.reset-filters-btn:hover {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.orders-count {
+  font-size: 0.78rem;
+  color: var(--text-muted, #6b7280);
+  white-space: nowrap;
+}
+
 
 .orders-list { display: flex; flex-direction: column; gap: 1rem; }
 
@@ -1469,5 +1953,133 @@ onMounted(async () => {
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid rgba(39, 65, 53, 0.1);
+}
+
+/* ── Réglages ────────────────────────────────────────────────────────── */
+.settings-page { max-width: 760px; }
+.settings-title { font-size: 1.1rem; font-weight: 700; color: var(--color-primary, #274135); margin: 0 0 1.5rem; }
+.settings-group { background: white; border: 1px solid rgba(39,65,53,.12); border-radius: 12px; overflow: hidden; margin-bottom: 1.5rem; }
+.settings-group-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #888; padding: .75rem 1.25rem; background: rgba(39,65,53,.04); border-bottom: 1px solid rgba(39,65,53,.08); margin: 0; }
+.settings-row { display: flex; gap: 2rem; padding: 1.5rem 1.25rem; align-items: flex-start; flex-wrap: wrap; }
+.settings-field { flex: 1; min-width: 260px; }
+.settings-label { display: block; font-weight: 600; font-size: .92rem; margin-bottom: .35rem; color: #333; }
+.settings-hint { font-size: .82rem; color: #888; margin: 0 0 .85rem; line-height: 1.4; }
+.settings-input-row { display: flex; align-items: center; gap: .5rem; }
+.settings-input { width: 100px; padding: .5rem .75rem; border: 1.5px solid rgba(39,65,53,.2); border-radius: 8px; font-size: 1rem; text-align: right; }
+.settings-input:focus { outline: none; border-color: var(--color-primary, #274135); }
+.settings-unit { font-weight: 600; color: #555; }
+.btn-save-setting { padding: .5rem 1.1rem; background: var(--color-primary, #274135); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+.btn-save-setting:disabled { opacity: .6; cursor: not-allowed; }
+.settings-success { margin-top: .5rem; color: #2d8a3e; font-size: .85rem; font-weight: 600; }
+.settings-error { margin-top: .5rem; color: #c0392b; font-size: .85rem; }
+
+.settings-preview { min-width: 200px; }
+.settings-preview-title { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #aaa; margin: 0 0 .5rem; }
+.settings-preview-box { border: 1px solid rgba(39,65,53,.12); border-radius: 8px; overflow: hidden; font-size: .9rem; }
+.preview-row { display: flex; justify-content: space-between; padding: .5rem .85rem; border-bottom: 1px solid rgba(39,65,53,.07); }
+.preview-row:last-child { border-bottom: none; }
+.preview-tva { color: #777; font-size: .85rem; }
+.preview-ttc { background: rgba(39,65,53,.06); font-weight: 700; }
+
+/* ── Stock summary ──────────────────────────────────────────────────── */
+.stock-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(39, 65, 53, 0.05);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  font-size: 0.82rem;
+  color: #374151;
+}
+.stock-summary-sep { color: #9ca3af; }
+.stock-summary-warn { color: #b45309; font-weight: 600; }
+
+/* ── Inline confirmations ───────────────────────────────────────────── */
+.inline-confirm-text {
+  font-size: 0.78rem;
+  color: #dc2626;
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+
+/* ── Suppliers ──────────────────────────────────────────────────────── */
+.supplier-orders-count {
+  font-size: 0.78rem;
+  color: var(--brand-olive, #3a5c2e);
+  cursor: pointer;
+  margin-top: 0.35rem;
+}
+.supplier-orders-count:hover { text-decoration: underline; }
+.btn-sm-link {
+  background: transparent;
+  border: 1.5px solid rgba(39, 65, 53, 0.2);
+  color: var(--brand-olive, #3a5c2e);
+  font-weight: 600;
+}
+.btn-sm-link:hover { background: rgba(39, 65, 53, 0.07); }
+
+/* ── Order collapse ─────────────────────────────────────────────────── */
+.order-collapse-icon {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  margin-right: 0.35rem;
+}
+.order-items-count {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-left: 0.5rem;
+}
+
+/* ── Inline receive confirmation ────────────────────────────────────── */
+.inline-receive-confirm {
+  margin-bottom: 1.25rem;
+  padding: 1.25rem;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 10px;
+}
+.inline-receive-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #166534;
+  margin-bottom: 0.35rem;
+}
+.inline-receive-sub {
+  font-size: 0.83rem;
+  color: #15803d;
+  margin-bottom: 0.75rem;
+}
+.inline-receive-items {
+  list-style: disc;
+  padding-left: 1.25rem;
+  font-size: 0.83rem;
+  color: #1f2937;
+  margin-bottom: 0.85rem;
+  line-height: 1.7;
+}
+.inline-receive-actions { display: flex; gap: 0.6rem; align-items: center; }
+
+/* ── Settings redesign ──────────────────────────────────────────────── */
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.settings-save-bar { display: flex; align-items: center; gap: 0.75rem; }
+.settings-group-hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-bottom: 0.85rem;
+  margin-top: -0.25rem;
+}
+.settings-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.85rem 1.25rem;
 }
 </style>

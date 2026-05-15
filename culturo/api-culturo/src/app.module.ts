@@ -1,3 +1,4 @@
+import { AppSettingsModule } from './app-settings/app-settings.module';
 import { SupplierModule } from './suppliers/supplier.module';
 import { PlantStockModule } from './plant-stock/plant-stock.module';
 import { SupplierOrderModule } from './supplier-orders/supplier-order.module';
@@ -66,6 +67,7 @@ const envFilePath =
     SupplierOrderModule,
     StatisticsModule,
     NotificationsModule,
+    AppSettingsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

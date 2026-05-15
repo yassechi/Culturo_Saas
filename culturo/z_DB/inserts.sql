@@ -377,4 +377,60 @@ INSERT INTO harvest(harvest_date, quantity, quantity_unit, "user_idUser", "secti
 ('2024-06-15', 60, 'kg', 1, 4),
 ('2024-07-01', 55, 'kg', 2, 7);
 
+-- =====================================================
+-- 18. SUPPLIER
+-- =====================================================
+INSERT INTO supplier (supplier_name, contact_email, contact_phone, website, supplier_active) VALUES
+('Graines du Terroir',  'contact@graines-terroir.fr', '01 23 45 67 89', 'https://graines-terroir.fr', TRUE),  -- ID 1
+('Les Plants Bio',      'info@plants-bio.be',          '02 34 56 78 90', NULL,                            TRUE),  -- ID 2
+('Semencier Dupont',    NULL,                           '03 45 67 89 01', NULL,                            FALSE); -- ID 3 (inactif)
+
+-- =====================================================
+-- 19. PLANT STOCK
+-- =====================================================
+INSERT INTO plant_stock (quantity, unit, received_date, notes, "vegetableIdVegetable", "varietyIdVariety", "exploitationIdExploitation") VALUES
+(120, 'plants', '2025-03-10', 'Réception printemps 2025',    1,    1,    1),  -- Carotte Nantes
+(80,  'plants', '2025-03-10', 'Réception printemps 2025',    1,    2,    1),  -- Carotte Chantenay
+(200, 'plants', '2025-03-15', 'Lot serre A',                 2,    3,    1),  -- Tomate Cerise
+(150, 'plants', '2025-03-15', 'Lot serre A',                 2,    4,    1),  -- Tomate Roma
+(60,  'plants', '2025-03-15', 'Commande mars',               10,   NULL, 2),  -- Courgette
+(300, 'plants', '2025-03-15', 'Commande mars',               9,    NULL, 2),  -- Oignon
+(0,   'plants', '2025-01-15', 'Stock épuisé',                5,    NULL, 1),  -- Poivron (zéro)
+(45,  'kg',     '2025-01-20', 'Semences hiver',              4,    NULL, 3);  -- Pomme de terre (kg)
+
+-- =====================================================
+-- 20. SUPPLIER ORDER
+-- =====================================================
+INSERT INTO supplier_order (status, order_date, expected_date, notes, "supplierIdSupplier", "user_idUser") VALUES
+('draft',     '2025-05-10', NULL,         'À valider avant fin mai',        1, 1),  -- ID 1
+('sent',      '2025-04-02', '2025-04-20', 'Livraison urgente — serre B',    2, 2),  -- ID 2
+('received',  '2025-03-01', '2025-03-15', 'Réception conforme',             1, 1),  -- ID 3
+('cancelled', '2025-02-14', '2025-02-28', 'Fournisseur indisponible',       2, 2);  -- ID 4
+
+-- =====================================================
+-- 21. SUPPLIER ORDER ITEM
+-- =====================================================
+-- Commande #1 (brouillon)
+INSERT INTO supplier_order_item (quantity_ordered, quantity_received, unit, unit_price, "vegetableIdVegetable", "varietyIdVariety", "supplierOrderIdSupplierOrder") VALUES
+(200, 0,   'plants', '0.25', 1, 1,    1),  -- Carotte Nantes
+(100, 0,   'plants', '0.45', 2, 3,    1),  -- Tomate Cerise
+(50,  0,   'plants', '0.35', 8, NULL, 1);  -- Brocoli
+
+-- Commande #2 (envoyée)
+INSERT INTO supplier_order_item (quantity_ordered, quantity_received, unit, unit_price, "vegetableIdVegetable", "varietyIdVariety", "supplierOrderIdSupplierOrder") VALUES
+(150, 0, 'plants', '0.20', 3, 5,    2),  -- Salade Batavia
+(80,  0, 'plants', '0.35', 8, NULL, 2),  -- Brocoli
+(40,  0, 'plants', '0.55', 6, NULL, 2);  -- Aubergine
+
+-- Commande #3 (reçue)
+INSERT INTO supplier_order_item (quantity_ordered, quantity_received, unit, unit_price, "vegetableIdVegetable", "varietyIdVariety", "supplierOrderIdSupplierOrder") VALUES
+(60,  60,  'plants', '0.55', 10, NULL, 3),  -- Courgette
+(300, 300, 'plants', '0.10', 9,  NULL, 3),  -- Oignon
+(80,  80,  'plants', '0.25', 1,  2,    3);  -- Carotte Chantenay
+
+-- Commande #4 (annulée)
+INSERT INTO supplier_order_item (quantity_ordered, quantity_received, unit, unit_price, "vegetableIdVegetable", "varietyIdVariety", "supplierOrderIdSupplierOrder") VALUES
+(50, 0, 'plants', '0.60', 5, NULL, 4),  -- Poivron
+(30, 0, 'plants', '0.80', 2, 4,   4);  -- Tomate Roma
+
 COMMIT;

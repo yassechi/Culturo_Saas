@@ -279,6 +279,7 @@
                   type="number"
                   min="0"
                   class="qty-input"
+                  :class="{ 'qty-input-over': availableStock !== null && (store.assignmentForm.quantityPlanted ?? 0) > availableStock }"
                 />
                 <select v-model="store.assignmentForm.unity" class="qty-unit">
                   <option value="kg">kg</option>
@@ -287,6 +288,14 @@
                   <option value="bottes">bottes</option>
                   <option value="graines">graines</option>
                 </select>
+              </div>
+              <!-- Indicateur de stock -->
+              <div v-if="availableStock !== null && availableStock > 0" class="stock-info">
+                📦 Stock disponible : <strong>{{ availableStock }}</strong> {{ store.assignmentForm.unity }}
+                <span v-if="(store.assignmentForm.quantityPlanted ?? 0) > availableStock" class="stock-over-hint"> — insuffisant ⚠</span>
+              </div>
+              <div v-else-if="availableStock === 0 && store.assignmentForm.vegetableId" class="stock-info stock-info-empty">
+                📦 Aucun stock enregistré pour ce légume
               </div>
             </div>
           </div>
@@ -629,6 +638,32 @@
           </div>
         </div>
 
+        <!-- ── Avertissement stock insuffisant ──────────────────────────────── -->
+        <div v-if="stockWarningVisible" class="stock-warning-banner">
+          <div class="stock-warning-header">
+            <span class="stock-warning-emoji">⚠️</span>
+            <strong>Stock insuffisant</strong>
+          </div>
+          <p class="stock-warning-text">
+            Stock disponible : <strong>{{ availableStock }} {{ store.assignmentForm.unity }}</strong><br>
+            Vous souhaitez planter <strong>{{ store.assignmentForm.quantityPlanted }} {{ store.assignmentForm.unity }}</strong>.
+          </p>
+          <div class="stock-warning-actions">
+            <button
+              v-if="availableStock && availableStock > 0"
+              type="button"
+              class="primary-button"
+              :disabled="store.assignmentLoading"
+              @click="proceedWithReducedQty"
+            >
+              Planter {{ availableStock }} {{ store.assignmentForm.unity }}
+            </button>
+            <button type="button" class="secondary-button" @click="cancelStockWarning">
+              Annuler
+            </button>
+          </div>
+        </div>
+
         <!-- ── Actions ────────────────────────────────────────────────────── -->
         <footer class="panel-footer">
           <!-- Mode plantation uniquement -->
@@ -639,7 +674,7 @@
               type="button"
               class="primary-button"
               :disabled="store.assignmentLoading"
-              @click="confirm(false)"
+              @click="handleConfirm(false)"
             >
               {{ store.assignmentLoading ? 'Enregistrement…' : 'Confirmer la plantation' }}
             </button>
@@ -650,7 +685,7 @@
               type="button"
               class="warning-button"
               :disabled="store.assignmentLoading"
-              @click="confirm(true)"
+              @click="handleConfirm(true)"
             >
               {{ store.assignmentLoading ? 'Enregistrement…' : 'Planter quand même' }}
             </button>
@@ -679,6 +714,7 @@ import { useHarvestStore } from '@/stores/harvest';
 import { useWateringStore } from '@/stores/watering';
 import { useAmendementStore } from '@/stores/amendement';
 import { useTreatmentStore } from '@/stores/treatment';
+import { usePlantManagementStore } from '@/stores/plantManagement';
 import { rotationsApi } from '@/api/rotations';
 import RotationRuleMessage from './RotationRuleMessage.vue';
 
@@ -689,6 +725,7 @@ const harvestStore = useHarvestStore();
 const wateringStore = useWateringStore();
 const amendementStore = useAmendementStore();
 const treatmentStore = useTreatmentStore();
+const plantStore = usePlantManagementStore();
 
 const showRestricted = ref(false);
 const showCompatible = ref(false);
@@ -900,6 +937,8 @@ onMounted(() => {
   loadPanelData();
   amendementStore.loadCatalogue();
   treatmentStore.loadCatalogue();
+  // Charger le stock si pas encore fait
+  if (plantStore.stock.length === 0) plantStore.loadStock();
 });
 
 watch(toRef(store, 'openSection'), (newSection, oldSection) => {
@@ -1160,6 +1199,39 @@ function formatDate(dateStr: string | null | undefined): string {
 }
 
 const plantingSuccess = ref(false);
+
+// ── Stock warning ─────────────────────────────────────────────────────────────
+
+// Stock disponible pour le légume sélectionné (toutes variétés confondues)
+const availableStock = computed(() => {
+  const vegId = store.assignmentForm.vegetableId;
+  if (!vegId) return null;
+  return plantStore.stockByVegetable.get(vegId) ?? 0;
+});
+
+const stockWarningVisible = ref(false);
+let pendingBypass = false;
+
+function handleConfirm(bypass: boolean) {
+  const qty = store.assignmentForm.quantityPlanted ?? 0;
+  const avail = availableStock.value;
+  if (qty > 0 && avail !== null && qty > avail) {
+    pendingBypass = bypass;
+    stockWarningVisible.value = true;
+    return;
+  }
+  confirm(bypass);
+}
+
+async function proceedWithReducedQty() {
+  store.assignmentForm.quantityPlanted = availableStock.value ?? 0;
+  stockWarningVisible.value = false;
+  await confirm(pendingBypass);
+}
+
+function cancelStockWarning() {
+  stockWarningVisible.value = false;
+}
 
 async function confirm(bypass: boolean) {
   const ok = await store.submitAssignment(bypass);
@@ -2433,5 +2505,64 @@ async function confirm(bypass: boolean) {
   .side-panel-overlay { padding: 0; }
   .side-panel { width: 100vw; border-radius: 0; }
   .form-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Stock info & warning ──────────────────────────────────────────────── */
+.stock-info {
+  font-size: 0.78rem;
+  color: #4a6741;
+  margin-top: 0.35rem;
+  padding: 0.2rem 0.4rem;
+  background: rgba(74, 103, 65, 0.08);
+  border-radius: 4px;
+}
+
+.stock-info-empty {
+  color: #9a7b3a;
+  background: rgba(154, 123, 58, 0.08);
+}
+
+.stock-over-hint {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.qty-input-over {
+  border-color: #d97706 !important;
+  background: rgba(251, 191, 36, 0.08) !important;
+}
+
+.stock-warning-banner {
+  margin: 0 1rem 0.75rem;
+  padding: 1rem 1.1rem;
+  background: #fffbeb;
+  border: 1.5px solid #f59e0b;
+  border-radius: 10px;
+}
+
+.stock-warning-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  color: #92400e;
+}
+
+.stock-warning-emoji {
+  font-size: 1.25rem;
+}
+
+.stock-warning-text {
+  font-size: 0.85rem;
+  color: #78350f;
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+
+.stock-warning-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 </style>

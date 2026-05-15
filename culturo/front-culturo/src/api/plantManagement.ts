@@ -113,3 +113,8 @@ export const supplierOrdersApi = {
   removeItem: (itemId: number) => apiClient.delete(`/supplier-orders/items/${itemId}`),
   remove: (id: number) => apiClient.delete(`/supplier-orders/${id}`),
 };
+
+export const settingsApi = {
+  getAll: () => apiClient.get<Record<string, string>>('/settings'),
+  set: (key: string, value: string) => apiClient.patch<{ key: string; value: string }>(`/settings/${key}`, { value }),
+};

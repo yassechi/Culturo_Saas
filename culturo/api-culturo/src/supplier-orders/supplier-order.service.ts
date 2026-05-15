@@ -8,6 +8,8 @@ import { User_ } from 'src/entities/user_.entity';
 import { Vegetable } from 'src/entities/vegetable.entity';
 import { Variety } from 'src/entities/variety.entity';
 import { PlantStockService } from 'src/plant-stock/plant-stock.service';
+import { EmailService } from 'src/email/email.service';
+import { AppSettingsService } from 'src/app-settings/app-settings.service';
 import {
   CreateSupplierOrderDto,
   CreateSupplierOrderItemDto,
@@ -30,6 +32,8 @@ export class SupplierOrderService {
     @InjectRepository(Variety)
     private readonly varietyRepository: Repository<Variety>,
     private readonly plantStockService: PlantStockService,
+    private readonly emailService: EmailService,
+    private readonly settingsService: AppSettingsService,
   ) {}
 
   private async loadOrder(id: number): Promise<SupplierOrder> {
@@ -89,20 +93,56 @@ export class SupplierOrderService {
       }
       order.status = dto.status;
 
+      // Quand on marque "sent" : récap à l'utilisateur + bon de commande au fournisseur
+      if (dto.status === 'sent') {
+        const tvaRateStr = await this.settingsService.get('tva_rate');
+        const tvaRate = parseFloat(tvaRateStr) || 0;
+        const contactEmail = await this.settingsService.get('contact_email');
+
+        // Récap interne → utilisateur
+        this.emailService.sendSupplierOrderSentEmail(
+          {
+            email: order.user_.email,
+            user_first_name: order.user_.user_first_name,
+            user_last_name: order.user_.user_last_name,
+          },
+          order,
+          tvaRate,
+        ).catch(err => console.error(`[SupplierOrder] Erreur email récap #${id}:`, err));
+
+        // Bon de commande → fournisseur (uniquement s'il a un email)
+        if (order.supplier?.contact_email) {
+          this.emailService.sendSupplierOrderToSupplier(
+            order.supplier.contact_email,
+            order,
+            tvaRate,
+            contactEmail,
+          ).catch(err => console.error(`[SupplierOrder] Erreur email fournisseur #${id}:`, err));
+        }
+      }
+
       // Quand on marque "received", on incrémente le stock automatiquement
       if (dto.status === 'received') {
+        console.log(`[SupplierOrder] Réception commande #${id} — ${order.items.length} article(s)`);
         for (const item of order.items) {
           const qtyReceived = item.quantity_received > 0 ? item.quantity_received : item.quantity_ordered;
-          await this.plantStockService.create({
-            id_vegetable: item.vegetable.id_vegetable,
-            id_variety: item.variety?.id_variety,
-            quantity: qtyReceived,
-            unit: item.unit,
-            received_date: new Date().toISOString().split('T')[0],
-            notes: `Commande #${id} — ${order.supplier.supplier_name}`,
-          });
-          item.quantity_received = qtyReceived;
-          await this.itemRepository.save(item);
+          console.log(`[SupplierOrder] Création stock: vegetable=${item.vegetable?.id_vegetable}, qty=${qtyReceived}`);
+          try {
+            await this.plantStockService.create({
+              id_vegetable: item.vegetable.id_vegetable,
+              id_variety: item.variety?.id_variety ?? undefined,
+              quantity: qtyReceived,
+              unit: item.unit ?? 'plants',
+              received_date: new Date().toISOString().split('T')[0],
+              notes: `Commande #${id} — ${order.supplier?.supplier_name ?? ''}`,
+            });
+            item.quantity_received = qtyReceived;
+            await this.itemRepository.save(item);
+            console.log(`[SupplierOrder] Stock créé OK pour item #${item.id_item}`);
+          } catch (err) {
+            console.error(`[SupplierOrder] Erreur création stock item #${item.id_item}:`, err);
+            // On continue malgré l'erreur pour traiter les autres articles
+          }
         }
       }
     }

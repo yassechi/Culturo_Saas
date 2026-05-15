@@ -10,6 +10,8 @@ import { SupplierOrderService } from './supplier-order.service';
 import { SupplierOrderController } from './supplier-order.controller';
 import { PlantStockModule } from 'src/plant-stock/plant-stock.module';
 import { UsersModule } from 'src/users/users.module';
+import { EmailModule } from 'src/email/email.module';
+import { AppSettingsModule } from 'src/app-settings/app-settings.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { UsersModule } from 'src/users/users.module';
     ]),
     PlantStockModule,
     UsersModule,
+    EmailModule,
+    AppSettingsModule,
   ],
   controllers: [SupplierOrderController],
   providers: [SupplierOrderService],

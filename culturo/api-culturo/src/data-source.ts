@@ -27,6 +27,7 @@ import { Supplier } from './entities/supplier.entity';
 import { PlantStock } from './entities/plant_stock.entity';
 import { SupplierOrder } from './entities/supplier_order.entity';
 import { SupplierOrderItem } from './entities/supplier_order_item.entity';
+import { AppSetting } from './entities/app_setting.entity';
 
 export const AppDataSourceOptions: DataSourceOptions = {
   type: 'postgres',
@@ -63,6 +64,7 @@ export const AppDataSourceOptions: DataSourceOptions = {
     PlantStock,
     SupplierOrder,
     SupplierOrderItem,
+    AppSetting,
   ],
   synchronize: process.env.NODE_ENV !== 'production',
 };

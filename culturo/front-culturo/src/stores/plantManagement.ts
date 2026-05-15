@@ -5,6 +5,7 @@ import {
   suppliersApi,
   plantStockApi,
   supplierOrdersApi,
+  settingsApi,
   type ApiSupplier,
   type ApiPlantStock,
   type ApiSupplierOrder,
@@ -83,6 +84,35 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
   const suppliers = ref<ApiSupplier[]>([]);
   const stock = ref<ApiPlantStock[]>([]);
   const orders = ref<ApiSupplierOrder[]>([]);
+
+  // ── App settings ──────────────────────────────────────────────────────────
+  const settings = ref<Record<string, string>>({});
+  const settingsSaving = ref(false);
+  const settingsError = ref<string | null>(null);
+  const settingsSaved = ref(false);
+
+  async function loadSettings() {
+    try {
+      const res = await settingsApi.getAll();
+      settings.value = res.data;
+    } catch { /* silencieux */ }
+  }
+
+  async function saveSetting(key: string, value: string) {
+    settingsSaving.value = true;
+    settingsError.value = null;
+    settingsSaved.value = false;
+    try {
+      await settingsApi.set(key, value);
+      settings.value[key] = value;
+      settingsSaved.value = true;
+      setTimeout(() => { settingsSaved.value = false; }, 2500);
+    } catch (e: unknown) {
+      settingsError.value = apiMessage(e, 'Impossible de sauvegarder.');
+    } finally {
+      settingsSaving.value = false;
+    }
+  }
 
   const loadingSuppliers = ref(false);
   const loadingStock = ref(false);
@@ -178,7 +208,7 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
   }
 
   async function loadAll() {
-    await Promise.all([loadSuppliers(), loadStock(), loadOrders()]);
+    await Promise.all([loadSuppliers(), loadStock(), loadOrders(), loadSettings()]);
   }
 
   // ── Supplier CRUD ────────────────────────────────────────────────────────
@@ -437,8 +467,10 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
       const res = await supplierOrdersApi.update(id, { status });
       const idx = orders.value.findIndex((o) => o.id_supplier_order === id);
       if (idx !== -1) orders.value[idx] = res.data;
-      // Si received → recharger le stock
-      if (status === 'received') await loadStock();
+      // Si received → recharger les commandes ET le stock
+      if (status === 'received') {
+        await Promise.all([loadStock(), loadOrders()]);
+      }
     } catch (e: unknown) {
       error.value = apiMessage(e, 'Impossible de modifier le statut.');
     }
@@ -518,6 +550,8 @@ export const usePlantManagementStore = defineStore('plantManagement', () => {
     orderDraftItems, addDraftRow, removeDraftRow,
     // Add item
     addItemOpen, addItemOrderId, itemForm, itemFormError, itemFormLoading,
+    // Settings
+    settings, settingsSaving, settingsError, settingsSaved, saveSetting,
     // Actions
     loadAll, loadSuppliers, loadStock, loadOrders,
     openCreateSupplier, openEditSupplier, closeSupplierModal, submitSupplierModal, deleteSupplier,
