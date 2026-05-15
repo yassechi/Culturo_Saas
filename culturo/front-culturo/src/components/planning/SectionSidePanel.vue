@@ -237,9 +237,38 @@
                 required
               />
             </div>
-            <div v-if="store.assignmentForm.varietyIdentifier" class="form-field form-field-full">
-              <label>Variété sélectionnée</label>
-              <span class="variety-selected-badge">{{ store.assignmentForm.varietyIdentifier }}</span>
+            <!-- Sélection de variété — toujours visible dès qu'un légume est choisi -->
+            <div class="form-field form-field-full">
+              <label>Variété</label>
+              <span v-if="varietiesLoading" class="variety-loading">Chargement des variétés…</span>
+              <template v-else>
+                <div class="variety-chips-row">
+                  <button
+                    v-for="v in currentVarieties"
+                    :key="v.id_variety"
+                    type="button"
+                    class="variety-chip"
+                    :class="{ 'variety-chip-selected': store.assignmentForm.varietyIdentifier === v.variety_name }"
+                    @click.stop="selectVariety(v.variety_name)"
+                  >{{ v.variety_name }}</button>
+                  <button
+                    type="button"
+                    class="variety-chip variety-chip-custom"
+                    :class="{ 'variety-chip-selected': varietySelectValue === '__custom__' }"
+                    @click.stop="selectVariety('__custom__')"
+                  >Autre…</button>
+                  <span v-if="currentVarieties.length === 0 && varietySelectValue !== '__custom__'" class="varieties-none">
+                    Aucune variété — sera plantée sans variété
+                  </span>
+                </div>
+                <input
+                  v-if="varietySelectValue === '__custom__'"
+                  v-model="store.assignmentForm.varietyIdentifier"
+                  type="text"
+                  class="variety-custom-inline"
+                  placeholder="Saisir une variété…"
+                />
+              </template>
             </div>
             <div class="form-field">
               <label for="qty">Quantité</label>
@@ -1780,6 +1809,13 @@ async function confirm(bypass: boolean) {
   font-size: 0.84rem;
   color: rgba(39, 65, 53, 0.45);
   padding: 0.6rem 0;
+}
+
+.variety-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
 }
 
 .form-grid {
