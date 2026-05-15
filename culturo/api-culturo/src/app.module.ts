@@ -1,3 +1,6 @@
+import { SupplierModule } from './suppliers/supplier.module';
+import { PlantStockModule } from './plant-stock/plant-stock.module';
+import { SupplierOrderModule } from './supplier-orders/supplier-order.module';
 import { StatisticsModule } from './statistics/statistics.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ExploitationModule } from './exploitations/exploitation.module';
@@ -58,6 +61,9 @@ const envFilePath =
     OrderModule,
     TreatmentModule,
     WateringModule,
+    SupplierModule,
+    PlantStockModule,
+    SupplierOrderModule,
     StatisticsModule,
     NotificationsModule,
   ],

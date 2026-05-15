@@ -51,6 +51,12 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['admin', 'formateur'], layout: 'main', title: 'Sol & Planches' },
     },
     {
+      path: '/plants',
+      name: 'plant-management',
+      component: () => import('@/views/PlantManagementView.vue'),
+      meta: { requiresAuth: true, layout: 'main', title: 'Gestion des plants' },
+    },
+    {
       path: '/historique',
       name: 'history',
       component: () => import('@/views/HistoryView.vue'),

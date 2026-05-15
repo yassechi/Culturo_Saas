@@ -153,6 +153,8 @@ const navIconMap: Record<string, string> = {
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
   '/admin/configuration':
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 19.07l-1.41 1.41M22 12h-2M4 12H2M19.07 19.07l-1.41-1.41M4.93 4.93l-1.41 1.41M12 22v-2M12 4V2"/></svg>',
+  '/plants':
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V12"/><path d="M12 12C12 7 7 4 3 6c0 4 3 8 9 6"/><path d="M12 12c0-5 5-8 9-6 0 4-3 8-9 6"/></svg>',
 };
 
 const navItems = computed(() => {
@@ -161,6 +163,7 @@ const navItems = computed(() => {
       { to: '/admin/utilisateurs', label: 'Utilisateurs' },
       { to: '/admin/botanique', label: 'Référentiel botanique' },
       { to: '/admin/sol-planches', label: 'Sol & planches' },
+      { to: '/plants', label: 'Plants & fournisseurs' },
       { to: '/plan', label: 'Planification' },
       { to: '/recoltes', label: 'Récoltes' },
       { to: '/arrosages', label: 'Arrosages' },
@@ -176,6 +179,7 @@ const navItems = computed(() => {
       { to: '/admin/utilisateurs', label: 'Utilisateurs' },
       { to: '/admin/botanique', label: 'Référentiel botanique' },
       { to: '/admin/sol-planches', label: 'Sol & planches' },
+      { to: '/plants', label: 'Plants & fournisseurs' },
       { to: '/plan', label: 'Planification' },
       { to: '/recoltes', label: 'Récoltes' },
       { to: '/arrosages', label: 'Arrosages' },
@@ -190,6 +194,7 @@ const navItems = computed(() => {
 
   return [
     { to: '/admin/botanique', label: 'Référentiel botanique' },
+    { to: '/plants', label: 'Plants & fournisseurs' },
     { to: '/plan', label: 'Planification' },
     { to: '/recoltes', label: 'Récoltes' },
     { to: '/arrosages', label: 'Arrosages' },
